@@ -308,7 +308,7 @@
         const lines = (data.details || []).map((d) => "- " + d.path + ": " + d.message).join("\n");
         show("profileOut", false, "Please fix these fields:\n" + lines);
       } else {
-        show("profileOut", false, "Error (" + res.status + "): " + (data.error || JSON.stringify(data)));
+        show("profileOut", false, "Error (" + res.status + "): " + (data.error || JSON.stringify(data)) + (data.message ? "\n" + data.message : ""));
       }
     } catch (e) {
       show("profileOut", false, "Network error: " + e.message);

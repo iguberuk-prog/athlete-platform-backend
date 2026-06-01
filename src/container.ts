@@ -22,10 +22,12 @@ import {
 } from "./data/supabaseRepository.js";
 import { ProfileService } from "./services/profileService.js";
 import { CheckInService } from "./services/checkinService.js";
+import { PlanService } from "./services/planService.js";
 
 interface Services {
   profiles: ProfileService;
   checkins: CheckInService;
+  plans: PlanService;
 }
 
 let services: Services | null = null;
@@ -41,6 +43,7 @@ function build(): Services {
     return {
       profiles: new ProfileService(profilesRepo),
       checkins: new CheckInService(checkinsRepo, profilesRepo),
+      plans: new PlanService(profilesRepo, checkinsRepo),
     };
   }
 
@@ -51,6 +54,7 @@ function build(): Services {
   return {
     profiles: new ProfileService(profilesRepo),
     checkins: new CheckInService(checkinsRepo, profilesRepo),
+    plans: new PlanService(profilesRepo, checkinsRepo),
   };
 }
 
@@ -65,4 +69,8 @@ export function getProfileService(): ProfileService {
 
 export function getCheckInService(): CheckInService {
   return getServices().checkins;
+}
+
+export function getPlanService(): PlanService {
+  return getServices().plans;
 }

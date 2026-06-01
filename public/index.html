@@ -46,6 +46,17 @@
   .profile .pid { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; color: var(--navy); margin-top: 4px; }
   .muted { color: var(--muted); font-size: 13px; }
   .hint { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .plan { margin-top: 12px; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .plansummary { background: var(--navy); color: #fff; padding: 10px 12px; font-size: 13px; }
+  .planwarn { background: #fff6e6; color: #8a5a00; padding: 8px 12px; font-size: 12.5px; border-bottom: 1px solid var(--line); }
+  .planblock { padding: 10px 12px; border-top: 1px solid var(--line); }
+  .planphase { font-weight: 700; color: var(--navy); font-size: 13.5px; }
+  .plantiming { color: var(--muted); font-size: 12px; margin-bottom: 6px; }
+  .plantargets { margin: 0; padding-left: 18px; font-size: 13px; }
+  .plantargets li { margin: 2px 0; }
+  .planfoods { margin-top: 6px; font-size: 12.5px; color: var(--green); }
+  .plansafety { padding: 8px 12px; font-size: 12px; color: var(--muted); border-top: 1px solid var(--line); background: var(--grey); }
+  .plandisc { padding: 8px 12px; font-size: 11px; color: var(--muted); font-style: italic; }
 </style>
 </head>
 <body>
@@ -318,9 +329,11 @@
           · ${p.anthropometrics?.heightCm}cm / ${p.anthropometrics?.bodyMassKg}kg</div>
         <div class="pid">${escapeHtml(p.ownerId)}</div>
         <div class="actions" style="margin-top:10px;">
+          <button class="primary" onclick="viewPlan('${p.id}','${escapeHtml(p.ownerId)}')">Today's match-day plan</button>
           <button class="ghost" onclick="quickCheckin('${p.id}','${escapeHtml(p.ownerId)}')">Log today's check-in</button>
         </div>
         <div class="out" id="ci-${p.id}"></div>
+        <div id="plan-${p.id}"></div>
       </div>`).join("");
   }
 
@@ -343,6 +356,37 @@
       out.className = "out err";
       out.textContent = "Network error: " + e.message;
     }
+  }
+
+  async function viewPlan(profileId, oid) {
+    const el = $("plan-" + profileId);
+    el.innerHTML = '<p class="muted">Building plan…</p>';
+    try {
+      const res = await apiAs(oid, "/api/profiles/" + profileId + "/plan");
+      const data = await res.json();
+      if (!res.ok) { el.innerHTML = '<div class="out err" style="display:block">' + escapeHtml(data.error || "error") + '</div>'; return; }
+      el.innerHTML = renderPlan(data);
+    } catch (e) {
+      el.innerHTML = '<div class="out err" style="display:block">' + escapeHtml(e.message) + '</div>';
+    }
+  }
+
+  function renderPlan(p) {
+    const warns = (p.safety.warnings || []).map((w) => '<div class="planwarn">\u26A0 ' + escapeHtml(w) + '</div>').join("");
+    const blocks = (p.blocks || []).map((b) => `
+      <div class="planblock">
+        <div class="planphase">${escapeHtml(b.phase)}</div>
+        <div class="plantiming">${escapeHtml(b.timing)}</div>
+        <ul class="plantargets">${(b.targets || []).map((t) => '<li><b>' + escapeHtml(t.label) + ':</b> ' + escapeHtml(t.detail) + '</li>').join("")}</ul>
+        ${(b.foods && b.foods.length) ? '<div class="planfoods">Foods: ' + b.foods.map(escapeHtml).join(", ") + '</div>' : ''}
+      </div>`).join("");
+    const bits = [];
+    if (p.safety.avoidAllergens.length) bits.push("Avoid: " + p.safety.avoidAllergens.join(", "));
+    if (p.safety.diets.length) bits.push("Diet: " + p.safety.diets.join(", "));
+    if (p.safety.intolerances.length) bits.push("Intolerances: " + p.safety.intolerances.join(", "));
+    const safety = bits.length ? '<div class="plansafety">' + escapeHtml(bits.join("  \u00B7  ")) + '</div>' : '';
+    return '<div class="plan"><div class="plansummary">' + escapeHtml(p.summary) + '</div>' +
+      warns + blocks + safety + '<div class="plandisc">' + escapeHtml(p.disclaimer) + '</div></div>';
   }
 
   function escapeHtml(s) { return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }

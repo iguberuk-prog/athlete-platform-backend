@@ -21,6 +21,8 @@ import { ProfileService } from "../src/services/profileService.js";
 import { CheckInService } from "../src/services/checkinService.js";
 import type { ProfileInput } from "../src/domain/profile.js";
 import type { CheckInInput } from "../src/domain/checkin.js";
+import { buildMatchDayPlan } from "../src/domain/plan.js";
+import type { AthleteProfile } from "../src/domain/profile.js";
 
 let passed = 0;
 let failed = 0;
@@ -201,6 +203,29 @@ async function main(): Promise<void> {
   const list = await checkins.list(owner, id);
   check("one check-in per day (upsert)", list.length === 1);
   check("check-in upsert updates value", list[0]?.energyLevel === 5);
+
+  console.log("\nMatch-day engine");
+  const fullProfile = await profiles.create(owner, validProfile());
+  const fp = fullProfile.ok ? (fullProfile.value as AthleteProfile) : null;
+  if (fp) {
+    const plan = buildMatchDayPlan(fp, { date: "2026-06-02", kickoff: "19:00", assumedKickoff: false });
+    check("plan scales carbs to body mass (75kg -> 90g post)", plan.blocks.some((b) => b.targets.some((t) => t.detail.includes("90 g"))));
+    check("plan lists 5 phases", plan.blocks.length === 5);
+    check("peanut allergy surfaced in safety", plan.safety.avoidAllergens.includes("peanut"));
+    // lactose intolerant -> Greek yogurt filtered out of recovery foods
+    const allFoods = plan.blocks.flatMap((b) => b.foods || []);
+    check("lactose intolerant excludes Greek yogurt", !allFoods.includes("Greek yogurt"));
+    // a vegan profile -> no animal proteins suggested
+    const vegan = validProfile();
+    vegan.nutrition.dietaryRestrictions = ["vegan"];
+    const veganProfile = { ...fp, nutrition: vegan.nutrition } as AthleteProfile;
+    const vplan = buildMatchDayPlan(veganProfile, { date: "2026-06-02", kickoff: "19:00", assumedKickoff: false });
+    const vFoods = vplan.blocks.flatMap((b) => b.foods || []);
+    check("vegan plan excludes chicken/eggs", !vFoods.includes("chicken breast") && !vFoods.includes("eggs"));
+    check("vegan plan still offers a protein (tofu/lentils)", vFoods.includes("tofu") || vFoods.includes("lentils"));
+  } else {
+    check("plan profile created", false);
+  }
 
   db.close();
   console.log(`\n${passed} passed, ${failed} failed`);

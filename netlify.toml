@@ -1,0 +1,26 @@
+# Netlify configuration for the athlete profile backend.
+#
+# This is a functions-only backend (no frontend yet). Netlify bundles the
+# TypeScript functions in netlify/functions with esbuild automatically.
+#
+# In the Netlify UI, set the site's "Base directory" to: backend
+# (so these relative paths resolve correctly). No build command is required.
+
+[build]
+  # No site to build; point publish at this folder so Netlify has something.
+  publish = "."
+  functions = "netlify/functions"
+
+[build.environment]
+  # Use a modern Node runtime for the functions.
+  NODE_VERSION = "20"
+
+[functions]
+  node_bundler = "esbuild"
+  # better-sqlite3 is a native module used only for LOCAL dev (sqlite backend).
+  # Mark it external so it is never bundled into the deployed functions, which
+  # run against Supabase.
+  external_node_modules = ["better-sqlite3"]
+
+[dev]
+  framework = "#static"

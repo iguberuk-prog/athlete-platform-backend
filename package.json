@@ -1,0 +1,24 @@
+{
+  "name": "athlete-platform-backend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Backend for the Athlete Performance Platform — athlete profile service.",
+  "scripts": {
+    "demo": "tsx scripts/demo.ts",
+    "test": "tsx scripts/test.ts",
+    "typecheck": "tsc --noEmit",
+    "dev": "netlify dev"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.106.2",
+    "better-sqlite3": "^11.0.0"
+  },
+  "devDependencies": {
+    "@netlify/functions": "^2.8.0",
+    "@types/better-sqlite3": "^7.6.0",
+    "@types/node": "^20.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.4.0"
+  }
+}

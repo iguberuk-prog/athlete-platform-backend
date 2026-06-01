@@ -57,41 +57,34 @@
 <div class="wrap">
 
   <div class="card">
-    <h2>Who are you?</h2>
-    <p class="sub">This is a temporary athlete ID (stands in for a real login later). Everything you save is scoped to it.</p>
-    <label>Athlete ID</label>
-    <input id="ownerId" value="athlete-123" />
-  </div>
-
-  <div class="card">
     <h2>New athlete profile</h2>
-    <p class="sub">Required fields are marked *. The rest can be filled in later.</p>
+    <p class="sub">Pick your sport first — it sets your Athlete ID and the positions you can choose. Required fields are marked *.</p>
+
+    <label>Full name *</label>
+    <input id="fullName" placeholder="Sam Player" />
 
     <div class="row">
-      <div><label>Full name *</label><input id="fullName" placeholder="Sam Player" /></div>
-      <div><label>Date of birth *</label><input id="dob" type="date" /></div>
+      <div>
+        <label>Primary sport *</label>
+        <select id="sport"></select>
+      </div>
+      <div>
+        <label>Position *</label>
+        <select id="position"></select>
+      </div>
     </div>
+
+    <label>Athlete ID *</label>
+    <input id="ownerId" />
+    <div class="hint">Auto-set from your sport (e.g. SOC-001). Change the number for each athlete; everything you save is scoped to this ID.</div>
+
     <div class="row">
+      <div><label>Date of birth *</label><input id="dob" type="date" /></div>
       <div><label>Sex *</label>
         <select id="sex"><option value="male">Male</option><option value="female">Female</option></select>
       </div>
-      <div><label>Primary sport *</label>
-        <select id="sport">
-          <option value="soccer">Soccer</option><option value="basketball">Basketball</option>
-          <option value="track">Track</option><option value="swimming">Swimming</option>
-          <option value="volleyball">Volleyball</option><option value="other">Other</option>
-        </select>
-      </div>
     </div>
     <div class="row">
-      <div><label>Position *</label>
-        <select id="position">
-          <option value="goalkeeper">Goalkeeper</option><option value="defender">Defender</option>
-          <option value="fullback">Fullback</option><option value="midfielder" selected>Midfielder</option>
-          <option value="winger">Winger</option><option value="forward">Forward</option>
-        </select>
-        <div class="hint" id="posHint">Soccer positions. (For other sports, any text is accepted.)</div>
-      </div>
       <div><label>Competition level *</label>
         <select id="level">
           <option value="recreational">Recreational</option>
@@ -99,6 +92,7 @@
           <option value="college">College</option><option value="professional">Professional</option>
         </select>
       </div>
+      <div></div>
     </div>
     <div class="row">
       <div><label>Height (cm) *</label><input id="height" type="number" value="175" /></div>
@@ -136,7 +130,7 @@
 
   <div class="card">
     <h2>Saved profiles</h2>
-    <p class="sub">Profiles saved under your athlete ID.</p>
+    <p class="sub">Profiles saved under your Athlete ID.</p>
     <div class="actions" style="margin-top:0;">
       <button class="ghost" onclick="loadProfiles()">Load my profiles</button>
     </div>
@@ -146,20 +140,79 @@
 </div>
 
 <script>
-  // Same-origin API: the page is served from the same Netlify site as the functions.
-  const api = (path, opts = {}) => fetch(path, {
-    ...opts,
-    headers: { "content-type": "application/json", "x-owner-id": ownerId(), ...(opts.headers || {}) },
-  });
-  const ownerId = () => document.getElementById("ownerId").value.trim() || "athlete-123";
+  // Sport config: code = Athlete ID prefix; positions = [value, label] for that sport.
+  const SPORTS = {
+    soccer:            { label: "Soccer", code: "SOC", positions: [
+      ["goalkeeper","Goalkeeper"],["defender","Defender"],["fullback","Fullback"],
+      ["midfielder","Midfielder"],["winger","Winger"],["forward","Forward"]] },
+    basketball:        { label: "Basketball", code: "BKB", positions: [
+      ["point_guard","Point guard"],["shooting_guard","Shooting guard"],["small_forward","Small forward"],
+      ["power_forward","Power forward"],["center","Center"]] },
+    american_football: { label: "American football", code: "AMF", positions: [
+      ["quarterback","Quarterback"],["running_back","Running back"],["wide_receiver","Wide receiver"],
+      ["tight_end","Tight end"],["offensive_line","Offensive line"],["defensive_line","Defensive line"],
+      ["linebacker","Linebacker"],["cornerback","Cornerback"],["safety","Safety"],
+      ["kicker","Kicker"],["punter","Punter"]] },
+    baseball:          { label: "Baseball", code: "BSB", positions: [
+      ["pitcher","Pitcher"],["catcher","Catcher"],["first_base","First base"],["second_base","Second base"],
+      ["third_base","Third base"],["shortstop","Shortstop"],["left_field","Left field"],
+      ["center_field","Center field"],["right_field","Right field"],["designated_hitter","Designated hitter"]] },
+    track:             { label: "Track & field", code: "TRK", positions: [
+      ["sprinter","Sprinter"],["middle_distance","Middle distance"],["long_distance","Long distance"],
+      ["hurdles","Hurdles"],["relay","Relay"],["jumps","Jumps"],["throws","Throws"],["multi_event","Multi-event"]] },
+    cross_country:     { label: "Cross country", code: "XC", positions: [
+      ["distance_runner","Distance runner"]] },
+    swimming:          { label: "Swimming", code: "SWM", positions: [
+      ["freestyle","Freestyle"],["backstroke","Backstroke"],["breaststroke","Breaststroke"],
+      ["butterfly","Butterfly"],["individual_medley","Individual medley"],["distance","Distance"],["sprint","Sprint"]] },
+    volleyball:        { label: "Volleyball", code: "VBL", positions: [
+      ["setter","Setter"],["outside_hitter","Outside hitter"],["opposite","Opposite"],
+      ["middle_blocker","Middle blocker"],["libero","Libero"],["defensive_specialist","Defensive specialist"]] },
+    lacrosse:          { label: "Lacrosse", code: "LAX", positions: [
+      ["attack","Attack"],["midfield","Midfield"],["defense","Defense"],["goalie","Goalie"],["faceoff","Face-off"]] },
+    hockey:            { label: "Hockey", code: "HKY", positions: [
+      ["goaltender","Goaltender"],["defenseman","Defenseman"],["center","Center"],
+      ["left_wing","Left wing"],["right_wing","Right wing"]] },
+    tennis:            { label: "Tennis", code: "TEN", positions: [
+      ["singles","Singles"],["doubles","Doubles"]] },
+    other:             { label: "Other", code: "GEN", positions: [
+      ["general","General"]] },
+  };
+
   const $ = (id) => document.getElementById(id);
+  const ownerId = () => $("ownerId").value.trim() || "GEN-001";
   const checked = (containerId) =>
     [...document.querySelectorAll(`#${containerId} input:checked`)].map((c) => c.value);
+
+  // Build the sport dropdown.
+  function initSports() {
+    $("sport").innerHTML = Object.entries(SPORTS)
+      .map(([k, v]) => `<option value="${k}">${v.label}</option>`).join("");
+    onSportChange();
+  }
+  // When sport changes: rebuild positions and reset the Athlete ID prefix.
+  function onSportChange() {
+    const sport = $("sport").value;
+    const cfg = SPORTS[sport];
+    $("position").innerHTML = cfg.positions
+      .map(([val, lab]) => `<option value="${val}">${lab}</option>`).join("");
+    // Keep the numeric suffix the user may have set; otherwise default to 001.
+    const m = ($("ownerId").value || "").match(/(\d+)\s*$/);
+    const suffix = m ? m[1] : "001";
+    $("ownerId").value = cfg.code + "-" + suffix;
+  }
 
   function show(elId, ok, msg) {
     const el = $(elId);
     el.className = "out " + (ok ? "ok" : "err");
     el.textContent = msg;
+  }
+
+  async function api(path, opts = {}) {
+    return fetch(path, {
+      ...opts,
+      headers: { "content-type": "application/json", "x-owner-id": ownerId(), ...(opts.headers || {}) },
+    });
   }
 
   async function createProfile() {
@@ -180,7 +233,7 @@
       const res = await api("/api/profiles", { method: "POST", body: JSON.stringify(payload) });
       const data = await res.json();
       if (res.status === 201) {
-        show("profileOut", true, "Saved! Profile ID: " + data.id + "\nName: " + data.identity.fullName);
+        show("profileOut", true, "Saved! Athlete ID " + data.ownerId + "  •  Profile ID " + data.id + "\nName: " + data.identity.fullName);
         loadProfiles();
       } else if (res.status === 422) {
         const lines = (data.details || []).map((d) => "- " + d.path + ": " + d.message).join("\n");
@@ -200,11 +253,12 @@
       const res = await api("/api/profiles");
       const data = await res.json();
       const profiles = data.profiles || [];
-      if (!profiles.length) { list.innerHTML = '<p class="muted">No profiles yet. Save one above.</p>'; return; }
+      if (!profiles.length) { list.innerHTML = '<p class="muted">No profiles yet for ' + escapeHtml(ownerId()) + '. Save one above.</p>'; return; }
       list.innerHTML = profiles.map((p) => `
         <div class="profile">
           <div class="pname">${escapeHtml(p.identity?.fullName || "Unnamed")}</div>
-          <div class="pmeta">${escapeHtml(p.sport?.primarySport || "")} · ${escapeHtml((p.sport?.positions || []).join(", "))}
+          <div class="pmeta">${escapeHtml(SPORTS[p.sport?.primarySport]?.label || p.sport?.primarySport || "")}
+            · ${escapeHtml((p.sport?.positions || []).join(", "))}
             · ${p.anthropometrics?.heightCm}cm / ${p.anthropometrics?.bodyMassKg}kg</div>
           <div class="pid">${p.id}</div>
           <div class="actions" style="margin-top:10px;">
@@ -240,10 +294,8 @@
 
   function escapeHtml(s) { return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
 
-  // Hint: only soccer uses the fixed position list.
-  document.getElementById("sport").addEventListener("change", (e) => {
-    document.getElementById("posHint").style.display = e.target.value === "soccer" ? "block" : "none";
-  });
+  $("sport").addEventListener("change", onSportChange);
+  initSports();
 </script>
 </body>
 </html>

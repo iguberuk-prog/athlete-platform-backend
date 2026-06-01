@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Athlete Performance Platform</title>
+<style>
+  :root {
+    --navy: #1f3a5f; --blue: #2e75b6; --light: #eaf1f8; --green: #1e8c5a;
+    --grey: #f4f6f9; --line: #d9e2ec; --text: #1c2733; --muted: #5a6b7b; --red: #c0392b;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+    color: var(--text); background: var(--grey); }
+  header { background: var(--navy); color: #fff; padding: 22px 20px; }
+  header h1 { margin: 0; font-size: 20px; letter-spacing: .3px; }
+  header p { margin: 4px 0 0; color: #b9cce0; font-size: 13px; }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 20px; }
+  .card { background: #fff; border: 1px solid var(--line); border-radius: 10px;
+    padding: 20px; margin-bottom: 18px; box-shadow: 0 1px 2px rgba(0,0,0,.04); }
+  .card h2 { margin: 0 0 4px; font-size: 16px; color: var(--navy); }
+  .card .sub { color: var(--muted); font-size: 13px; margin: 0 0 16px; }
+  label { display: block; font-size: 13px; font-weight: 600; margin: 12px 0 5px; color: #33424f; }
+  input, select { width: 100%; padding: 9px 10px; border: 1px solid var(--line);
+    border-radius: 7px; font-size: 14px; background: #fff; color: var(--text); }
+  input:focus, select:focus { outline: none; border-color: var(--blue); }
+  .row { display: flex; gap: 14px; flex-wrap: wrap; }
+  .row > div { flex: 1 1 200px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+  .chip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px;
+    border: 1px solid var(--line); border-radius: 999px; font-size: 13px; cursor: pointer; user-select: none; }
+  .chip input { width: auto; }
+  button { cursor: pointer; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; padding: 11px 18px; }
+  .primary { background: var(--blue); color: #fff; }
+  .primary:hover { background: #285f92; }
+  .ghost { background: #eef3f8; color: var(--navy); }
+  .actions { margin-top: 18px; display: flex; gap: 10px; flex-wrap: wrap; }
+  .out { margin-top: 14px; font-size: 13px; padding: 12px 14px; border-radius: 8px; display: none; white-space: pre-wrap; word-break: break-word; }
+  .out.ok { display: block; background: #e8f6ee; border: 1px solid #b6e0c6; color: #14543a; }
+  .out.err { display: block; background: #fcebea; border: 1px solid #f0c4c0; color: #7a241d; }
+  .profile { border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; margin-top: 10px; }
+  .profile .pname { font-weight: 700; color: var(--navy); }
+  .profile .pmeta { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .profile .pid { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11px; color: #8794a1; }
+  .muted { color: var(--muted); font-size: 13px; }
+  .hint { font-size: 12px; color: var(--muted); margin-top: 4px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap" style="padding-top:0;padding-bottom:0;">
+    <h1>Athlete Performance Platform</h1>
+    <p>Create an athlete profile and log a daily check-in</p>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <div class="card">
+    <h2>Who are you?</h2>
+    <p class="sub">This is a temporary athlete ID (stands in for a real login later). Everything you save is scoped to it.</p>
+    <label>Athlete ID</label>
+    <input id="ownerId" value="athlete-123" />
+  </div>
+
+  <div class="card">
+    <h2>New athlete profile</h2>
+    <p class="sub">Required fields are marked *. The rest can be filled in later.</p>
+
+    <div class="row">
+      <div><label>Full name *</label><input id="fullName" placeholder="Sam Player" /></div>
+      <div><label>Date of birth *</label><input id="dob" type="date" /></div>
+    </div>
+    <div class="row">
+      <div><label>Sex *</label>
+        <select id="sex"><option value="male">Male</option><option value="female">Female</option></select>
+      </div>
+      <div><label>Primary sport *</label>
+        <select id="sport">
+          <option value="soccer">Soccer</option><option value="basketball">Basketball</option>
+          <option value="track">Track</option><option value="swimming">Swimming</option>
+          <option value="volleyball">Volleyball</option><option value="other">Other</option>
+        </select>
+      </div>
+    </div>
+    <div class="row">
+      <div><label>Position *</label>
+        <select id="position">
+          <option value="goalkeeper">Goalkeeper</option><option value="defender">Defender</option>
+          <option value="fullback">Fullback</option><option value="midfielder" selected>Midfielder</option>
+          <option value="winger">Winger</option><option value="forward">Forward</option>
+        </select>
+        <div class="hint" id="posHint">Soccer positions. (For other sports, any text is accepted.)</div>
+      </div>
+      <div><label>Competition level *</label>
+        <select id="level">
+          <option value="recreational">Recreational</option>
+          <option value="high_school" selected>High school</option>
+          <option value="college">College</option><option value="professional">Professional</option>
+        </select>
+      </div>
+    </div>
+    <div class="row">
+      <div><label>Height (cm) *</label><input id="height" type="number" value="175" /></div>
+      <div><label>Weight (kg) *</label><input id="weight" type="number" value="68" /></div>
+    </div>
+
+    <label>Allergies</label>
+    <div class="chips" id="allergies">
+      <label class="chip"><input type="checkbox" value="peanut" /> Peanut</label>
+      <label class="chip"><input type="checkbox" value="tree_nut" /> Tree nut</label>
+      <label class="chip"><input type="checkbox" value="milk" /> Milk</label>
+      <label class="chip"><input type="checkbox" value="egg" /> Egg</label>
+      <label class="chip"><input type="checkbox" value="soy" /> Soy</label>
+      <label class="chip"><input type="checkbox" value="fish" /> Fish</label>
+      <label class="chip"><input type="checkbox" value="shellfish" /> Shellfish</label>
+      <label class="chip"><input type="checkbox" value="gluten" /> Gluten</label>
+    </div>
+
+    <label>Dietary restrictions</label>
+    <div class="chips" id="diets">
+      <label class="chip"><input type="checkbox" value="vegetarian" /> Vegetarian</label>
+      <label class="chip"><input type="checkbox" value="vegan" /> Vegan</label>
+      <label class="chip"><input type="checkbox" value="pescatarian" /> Pescatarian</label>
+      <label class="chip"><input type="checkbox" value="halal" /> Halal</label>
+      <label class="chip"><input type="checkbox" value="kosher" /> Kosher</label>
+      <label class="chip"><input type="checkbox" value="gluten_free" /> Gluten-free</label>
+      <label class="chip"><input type="checkbox" value="dairy_free" /> Dairy-free</label>
+    </div>
+
+    <div class="actions">
+      <button class="primary" onclick="createProfile()">Save profile</button>
+    </div>
+    <div id="profileOut" class="out"></div>
+  </div>
+
+  <div class="card">
+    <h2>Saved profiles</h2>
+    <p class="sub">Profiles saved under your athlete ID.</p>
+    <div class="actions" style="margin-top:0;">
+      <button class="ghost" onclick="loadProfiles()">Load my profiles</button>
+    </div>
+    <div id="list"></div>
+  </div>
+
+</div>
+
+<script>
+  // Same-origin API: the page is served from the same Netlify site as the functions.
+  const api = (path, opts = {}) => fetch(path, {
+    ...opts,
+    headers: { "content-type": "application/json", "x-owner-id": ownerId(), ...(opts.headers || {}) },
+  });
+  const ownerId = () => document.getElementById("ownerId").value.trim() || "athlete-123";
+  const $ = (id) => document.getElementById(id);
+  const checked = (containerId) =>
+    [...document.querySelectorAll(`#${containerId} input:checked`)].map((c) => c.value);
+
+  function show(elId, ok, msg) {
+    const el = $(elId);
+    el.className = "out " + (ok ? "ok" : "err");
+    el.textContent = msg;
+  }
+
+  async function createProfile() {
+    const sport = $("sport").value;
+    const payload = {
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+      identity: { fullName: $("fullName").value.trim(), dateOfBirth: $("dob").value || undefined, sex: $("sex").value },
+      sport: { primarySport: sport, positions: [$("position").value], competitionLevel: $("level").value },
+      anthropometrics: { heightCm: Number($("height").value), bodyMassKg: Number($("weight").value) },
+      nutrition: {
+        allergies: checked("allergies").map((a) => ({ allergen: a, severity: "moderate" })),
+        dietaryRestrictions: checked("diets"),
+        intolerances: [],
+        dislikes: [],
+      },
+    };
+    try {
+      const res = await api("/api/profiles", { method: "POST", body: JSON.stringify(payload) });
+      const data = await res.json();
+      if (res.status === 201) {
+        show("profileOut", true, "Saved! Profile ID: " + data.id + "\nName: " + data.identity.fullName);
+        loadProfiles();
+      } else if (res.status === 422) {
+        const lines = (data.details || []).map((d) => "- " + d.path + ": " + d.message).join("\n");
+        show("profileOut", false, "Please fix these fields:\n" + lines);
+      } else {
+        show("profileOut", false, "Error (" + res.status + "): " + (data.error || JSON.stringify(data)));
+      }
+    } catch (e) {
+      show("profileOut", false, "Network error: " + e.message);
+    }
+  }
+
+  async function loadProfiles() {
+    const list = $("list");
+    list.innerHTML = '<p class="muted">Loading…</p>';
+    try {
+      const res = await api("/api/profiles");
+      const data = await res.json();
+      const profiles = data.profiles || [];
+      if (!profiles.length) { list.innerHTML = '<p class="muted">No profiles yet. Save one above.</p>'; return; }
+      list.innerHTML = profiles.map((p) => `
+        <div class="profile">
+          <div class="pname">${escapeHtml(p.identity?.fullName || "Unnamed")}</div>
+          <div class="pmeta">${escapeHtml(p.sport?.primarySport || "")} · ${escapeHtml((p.sport?.positions || []).join(", "))}
+            · ${p.anthropometrics?.heightCm}cm / ${p.anthropometrics?.bodyMassKg}kg</div>
+          <div class="pid">${p.id}</div>
+          <div class="actions" style="margin-top:10px;">
+            <button class="ghost" onclick="quickCheckin('${p.id}')">Log today's check-in</button>
+          </div>
+          <div class="out" id="ci-${p.id}"></div>
+        </div>`).join("");
+    } catch (e) {
+      list.innerHTML = '<p class="muted">Could not load: ' + escapeHtml(e.message) + "</p>";
+    }
+  }
+
+  async function quickCheckin(profileId) {
+    const energy = Number(prompt("Energy today (1-10)?", "8"));
+    if (!energy) return;
+    const soreness = Number(prompt("Soreness today (1-10)?", "3")) || undefined;
+    const sleep = Number(prompt("Hours slept last night?", "7.5")) || undefined;
+    const today = new Date().toISOString().slice(0, 10);
+    const body = { date: today, energyLevel: energy, sorenessLevel: soreness, sleepHoursLastNight: sleep };
+    const out = $("ci-" + profileId);
+    try {
+      const res = await api("/api/profiles/" + profileId + "/checkins", { method: "POST", body: JSON.stringify(body) });
+      const data = await res.json();
+      out.className = "out " + (res.status === 201 ? "ok" : "err");
+      out.textContent = res.status === 201
+        ? "Check-in saved for " + data.date + " (energy " + data.energyLevel + ")."
+        : "Error: " + (data.error || JSON.stringify(data.details || data));
+    } catch (e) {
+      out.className = "out err";
+      out.textContent = "Network error: " + e.message;
+    }
+  }
+
+  function escapeHtml(s) { return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
+
+  // Hint: only soccer uses the fixed position list.
+  document.getElementById("sport").addEventListener("change", (e) => {
+    document.getElementById("posHint").style.display = e.target.value === "soccer" ? "block" : "none";
+  });
+</script>
+</body>
+</html>

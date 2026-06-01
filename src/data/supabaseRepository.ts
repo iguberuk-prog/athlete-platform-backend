@@ -17,6 +17,7 @@
  */
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import WebSocket from "ws";
 import { randomUUID } from "node:crypto";
 import type { AthleteProfile, ProfileInput } from "../domain/profile.js";
 import type { CheckInInput, DailyCheckIn } from "../domain/checkin.js";
@@ -34,9 +35,12 @@ function makeClient(url: string, serviceKey: string): SupabaseClient {
       "SUPABASE_URL and SUPABASE_SERVICE_KEY are required for the Supabase backend.",
     );
   }
-  // Server-side usage: no session persistence needed.
+  // Server-side usage: no session persistence needed. We do not use realtime,
+  // but Supabase's client constructs a realtime client that needs a WebSocket;
+  // supply one explicitly so it works on any Node version (Netlify functions).
   return createClient(url, serviceKey, {
     auth: { persistSession: false, autoRefreshToken: false },
+    realtime: { transport: WebSocket as unknown as never },
   });
 }
 

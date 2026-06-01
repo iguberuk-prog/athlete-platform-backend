@@ -14,7 +14,7 @@
 [functions]
   node_bundler = "esbuild"
   # Native module used only for local dev; never bundled into deployed functions.
-  external_node_modules = ["better-sqlite3"]
+  external_node_modules = ["better-sqlite3", "ws", "bufferutil", "utf-8-validate"]
 
 [dev]
   framework = "#static"

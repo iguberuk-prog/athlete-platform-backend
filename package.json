@@ -12,12 +12,14 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.106.2",
-    "better-sqlite3": "^11.0.0"
+    "better-sqlite3": "^11.0.0",
+    "ws": "^8.21.0"
   },
   "devDependencies": {
     "@netlify/functions": "^2.8.0",
     "@types/better-sqlite3": "^7.6.0",
     "@types/node": "^20.0.0",
+    "@types/ws": "^8.18.1",
     "tsx": "^4.0.0",
     "typescript": "^5.4.0"
   }

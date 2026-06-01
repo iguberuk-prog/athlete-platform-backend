@@ -83,7 +83,9 @@ export default async (req: Request, context: Context): Promise<Response> => {
         return json({ error: "method_not_allowed" }, 405);
     }
   } catch (err) {
-    return json({ error: "bad_request", message: (err as Error).message }, 400);
+    const e = err as Error & { cause?: { message?: string } };
+    const detail = e.cause?.message ? `${e.message}: ${e.cause.message}` : e.message;
+    return json({ error: "bad_request", message: detail }, 400);
   }
 };
 

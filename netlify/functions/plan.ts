@@ -42,7 +42,9 @@ export default async (req: Request, context: Context): Promise<Response> => {
     const result = await getPlanService().matchDay(ownerId, id, { date, kickoff, conditions });
     return result.ok ? json(result.value) : json({ error: "not_found" }, 404);
   } catch (err) {
-    return json({ error: "bad_request", message: (err as Error).message }, 400);
+    const e = err as Error & { cause?: { message?: string } };
+    const detail = e.cause?.message ? `${e.message}: ${e.cause.message}` : e.message;
+    return json({ error: "bad_request", message: detail }, 400);
   }
 };
 

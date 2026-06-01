@@ -24,6 +24,8 @@
   input, select { width: 100%; padding: 9px 10px; border: 1px solid var(--line);
     border-radius: 7px; font-size: 14px; background: #fff; color: var(--text); }
   input:focus, select:focus { outline: none; border-color: var(--blue); }
+  input[readonly] { background: #eef3f8; color: var(--navy); font-weight: 700; letter-spacing: .5px;
+    font-family: ui-monospace, Menlo, Consolas, monospace; }
   .row { display: flex; gap: 14px; flex-wrap: wrap; }
   .row > div { flex: 1 1 200px; }
   .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
@@ -41,7 +43,7 @@
   .profile { border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; margin-top: 10px; }
   .profile .pname { font-weight: 700; color: var(--navy); }
   .profile .pmeta { color: var(--muted); font-size: 12px; margin-top: 2px; }
-  .profile .pid { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11px; color: #8794a1; }
+  .profile .pid { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; color: var(--navy); margin-top: 4px; }
   .muted { color: var(--muted); font-size: 13px; }
   .hint { font-size: 12px; color: var(--muted); margin-top: 4px; }
 </style>
@@ -58,7 +60,7 @@
 
   <div class="card">
     <h2>New athlete profile</h2>
-    <p class="sub">Pick your sport first — it sets your Athlete ID and the positions you can choose. Required fields are marked *.</p>
+    <p class="sub">Pick the sport first — it sets the player's unique ID and the positions available. Required fields are marked *.</p>
 
     <label>Full name *</label>
     <input id="fullName" placeholder="Sam Player" />
@@ -74,9 +76,9 @@
       </div>
     </div>
 
-    <label>Athlete ID *</label>
-    <input id="ownerId" />
-    <div class="hint">Auto-set from your sport (e.g. SOC-001). Change the number for each athlete; everything you save is scoped to this ID.</div>
+    <label>Athlete ID (unique, auto-generated)</label>
+    <input id="ownerId" readonly />
+    <div class="hint">Every player gets their own unique ID, starting with the sport code (e.g. SOC-K7F2Q). A new one is generated automatically for each athlete.</div>
 
     <div class="row">
       <div><label>Date of birth *</label><input id="dob" type="date" /></div>
@@ -129,10 +131,10 @@
   </div>
 
   <div class="card">
-    <h2>Saved profiles</h2>
-    <p class="sub">Profiles saved under your Athlete ID.</p>
+    <h2>Saved players</h2>
+    <p class="sub">Every athlete you create on this device.</p>
     <div class="actions" style="margin-top:0;">
-      <button class="ghost" onclick="loadProfiles()">Load my profiles</button>
+      <button class="ghost" onclick="loadProfiles()">Load players</button>
     </div>
     <div id="list"></div>
   </div>
@@ -180,26 +182,43 @@
   };
 
   const $ = (id) => document.getElementById(id);
-  const ownerId = () => $("ownerId").value.trim() || "GEN-001";
   const checked = (containerId) =>
     [...document.querySelectorAll(`#${containerId} input:checked`)].map((c) => c.value);
 
-  // Build the sport dropdown.
+  // ---- Unique per-player Athlete ID -------------------------------------
+  function randomCode(n = 5) {
+    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no easily-confused chars
+    let s = "";
+    for (let i = 0; i < n; i++) s += chars[Math.floor(Math.random() * chars.length)];
+    return s;
+  }
+  function newAthleteId() {
+    const code = SPORTS[$("sport").value].code;
+    $("ownerId").value = code + "-" + randomCode();
+  }
+  const ownerId = () => $("ownerId").value.trim();
+
+  // ---- Remember created players on this device --------------------------
+  function getStoredIds() {
+    try { return JSON.parse(localStorage.getItem("athleteIds") || "[]"); } catch { return []; }
+  }
+  function rememberId(id) {
+    try {
+      const ids = getStoredIds();
+      if (!ids.includes(id)) { ids.push(id); localStorage.setItem("athleteIds", JSON.stringify(ids)); }
+    } catch {}
+  }
+
   function initSports() {
     $("sport").innerHTML = Object.entries(SPORTS)
       .map(([k, v]) => `<option value="${k}">${v.label}</option>`).join("");
     onSportChange();
   }
-  // When sport changes: rebuild positions and reset the Athlete ID prefix.
   function onSportChange() {
-    const sport = $("sport").value;
-    const cfg = SPORTS[sport];
+    const cfg = SPORTS[$("sport").value];
     $("position").innerHTML = cfg.positions
       .map(([val, lab]) => `<option value="${val}">${lab}</option>`).join("");
-    // Keep the numeric suffix the user may have set; otherwise default to 001.
-    const m = ($("ownerId").value || "").match(/(\d+)\s*$/);
-    const suffix = m ? m[1] : "001";
-    $("ownerId").value = cfg.code + "-" + suffix;
+    newAthleteId(); // fresh unique ID with the new sport's prefix
   }
 
   function show(elId, ok, msg) {
@@ -208,14 +227,15 @@
     el.textContent = msg;
   }
 
-  async function api(path, opts = {}) {
+  async function apiAs(oid, path, opts = {}) {
     return fetch(path, {
       ...opts,
-      headers: { "content-type": "application/json", "x-owner-id": ownerId(), ...(opts.headers || {}) },
+      headers: { "content-type": "application/json", "x-owner-id": oid, ...(opts.headers || {}) },
     });
   }
 
   async function createProfile() {
+    const oid = ownerId();
     const sport = $("sport").value;
     const payload = {
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
@@ -230,10 +250,13 @@
       },
     };
     try {
-      const res = await api("/api/profiles", { method: "POST", body: JSON.stringify(payload) });
+      const res = await apiAs(oid, "/api/profiles", { method: "POST", body: JSON.stringify(payload) });
       const data = await res.json();
       if (res.status === 201) {
-        show("profileOut", true, "Saved! Athlete ID " + data.ownerId + "  •  Profile ID " + data.id + "\nName: " + data.identity.fullName);
+        rememberId(data.ownerId);
+        show("profileOut", true, "Saved! Athlete ID " + data.ownerId + "\nName: " + data.identity.fullName);
+        $("fullName").value = "";
+        newAthleteId(); // ready for the next, different player
         loadProfiles();
       } else if (res.status === 422) {
         const lines = (data.details || []).map((d) => "- " + d.path + ": " + d.message).join("\n");
@@ -248,30 +271,32 @@
 
   async function loadProfiles() {
     const list = $("list");
+    const ids = getStoredIds();
+    if (!ids.length) { list.innerHTML = '<p class="muted">No players yet. Save one above.</p>'; return; }
     list.innerHTML = '<p class="muted">Loading…</p>';
-    try {
-      const res = await api("/api/profiles");
-      const data = await res.json();
-      const profiles = data.profiles || [];
-      if (!profiles.length) { list.innerHTML = '<p class="muted">No profiles yet for ' + escapeHtml(ownerId()) + '. Save one above.</p>'; return; }
-      list.innerHTML = profiles.map((p) => `
-        <div class="profile">
-          <div class="pname">${escapeHtml(p.identity?.fullName || "Unnamed")}</div>
-          <div class="pmeta">${escapeHtml(SPORTS[p.sport?.primarySport]?.label || p.sport?.primarySport || "")}
-            · ${escapeHtml((p.sport?.positions || []).join(", "))}
-            · ${p.anthropometrics?.heightCm}cm / ${p.anthropometrics?.bodyMassKg}kg</div>
-          <div class="pid">${p.id}</div>
-          <div class="actions" style="margin-top:10px;">
-            <button class="ghost" onclick="quickCheckin('${p.id}')">Log today's check-in</button>
-          </div>
-          <div class="out" id="ci-${p.id}"></div>
-        </div>`).join("");
-    } catch (e) {
-      list.innerHTML = '<p class="muted">Could not load: ' + escapeHtml(e.message) + "</p>";
+    const all = [];
+    for (const oid of ids) {
+      try {
+        const res = await apiAs(oid, "/api/profiles");
+        if (res.ok) { const d = await res.json(); (d.profiles || []).forEach((p) => all.push(p)); }
+      } catch {}
     }
+    if (!all.length) { list.innerHTML = '<p class="muted">No saved players found.</p>'; return; }
+    list.innerHTML = all.map((p) => `
+      <div class="profile">
+        <div class="pname">${escapeHtml(p.identity?.fullName || "Unnamed")}</div>
+        <div class="pmeta">${escapeHtml(SPORTS[p.sport?.primarySport]?.label || p.sport?.primarySport || "")}
+          · ${escapeHtml((p.sport?.positions || []).join(", "))}
+          · ${p.anthropometrics?.heightCm}cm / ${p.anthropometrics?.bodyMassKg}kg</div>
+        <div class="pid">${escapeHtml(p.ownerId)}</div>
+        <div class="actions" style="margin-top:10px;">
+          <button class="ghost" onclick="quickCheckin('${p.id}','${escapeHtml(p.ownerId)}')">Log today's check-in</button>
+        </div>
+        <div class="out" id="ci-${p.id}"></div>
+      </div>`).join("");
   }
 
-  async function quickCheckin(profileId) {
+  async function quickCheckin(profileId, oid) {
     const energy = Number(prompt("Energy today (1-10)?", "8"));
     if (!energy) return;
     const soreness = Number(prompt("Soreness today (1-10)?", "3")) || undefined;
@@ -280,7 +305,7 @@
     const body = { date: today, energyLevel: energy, sorenessLevel: soreness, sleepHoursLastNight: sleep };
     const out = $("ci-" + profileId);
     try {
-      const res = await api("/api/profiles/" + profileId + "/checkins", { method: "POST", body: JSON.stringify(body) });
+      const res = await apiAs(oid, "/api/profiles/" + profileId + "/checkins", { method: "POST", body: JSON.stringify(body) });
       const data = await res.json();
       out.className = "out " + (res.status === 201 ? "ok" : "err");
       out.textContent = res.status === 201
@@ -296,6 +321,7 @@
 
   $("sport").addEventListener("change", onSportChange);
   initSports();
+  loadProfiles();
 </script>
 </body>
 </html>

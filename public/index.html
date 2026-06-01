@@ -108,7 +108,14 @@
       <div></div>
     </div>
     <div class="row">
-      <div><label>Height (cm) *</label><input id="height" type="number" value="175" /></div>
+      <div>
+        <label>Height (ft / in) *</label>
+        <div style="display:flex; gap:8px;">
+          <input id="heightFt" type="number" min="3" max="8" step="1" value="5" aria-label="feet" />
+          <input id="heightIn" type="number" min="0" max="11" step="1" value="9" aria-label="inches" />
+        </div>
+        <div class="hint">e.g. 5 ft 9 in</div>
+      </div>
       <div><label>Weight (kg) *</label><input id="weight" type="number" value="68" /></div>
     </div>
 
@@ -278,7 +285,7 @@
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
       identity: { fullName: $("fullName").value.trim(), dateOfBirth: $("dob").value || undefined, sex: $("sex").value },
       sport: { primarySport: sport, positions: [$("position").value], competitionLevel: $("level").value },
-      anthropometrics: { heightCm: Number($("height").value), bodyMassKg: Number($("weight").value) },
+      anthropometrics: { heightCm: Math.round((Number($("heightFt").value) * 12 + Number($("heightIn").value)) * 2.54), bodyMassKg: Number($("weight").value) },
       contact: buildContact(),
       nutrition: {
         allergies: checked("allergies").map((a) => ({ allergen: a, severity: "moderate" })),

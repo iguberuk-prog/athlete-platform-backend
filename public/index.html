@@ -101,6 +101,20 @@
       <div><label>Weight (kg) *</label><input id="weight" type="number" value="68" /></div>
     </div>
 
+    <label style="margin-top:20px;font-size:15px;color:var(--navy);border-top:1px solid var(--line);padding-top:16px;">Contact information</label>
+    <div class="row">
+      <div><label>Athlete email</label><input id="athEmail" type="email" placeholder="player@example.com" /></div>
+      <div><label>Athlete phone</label><input id="athPhone" type="tel" placeholder="+1 555 123 4567" /></div>
+    </div>
+    <div class="row">
+      <div><label>Parent / guardian email</label><input id="parEmail" type="email" placeholder="parent@example.com" /></div>
+      <div><label>Parent / guardian phone</label><input id="parPhone" type="tel" /></div>
+    </div>
+    <div class="row">
+      <div><label>Emergency contact name</label><input id="emName" placeholder="e.g. Jordan Player" /></div>
+      <div><label>Emergency contact phone</label><input id="emPhone" type="tel" /></div>
+    </div>
+
     <label>Allergies</label>
     <div class="chips" id="allergies">
       <label class="chip"><input type="checkbox" value="peanut" /> Peanut</label>
@@ -234,6 +248,18 @@
     });
   }
 
+  // Collect contact info; omit empty fields so we only send what was entered.
+  function buildContact() {
+    const v = (id) => { const x = $(id).value.trim(); return x || undefined; };
+    const c = {
+      athleteEmail: v("athEmail"), parentEmail: v("parEmail"),
+      athletePhone: v("athPhone"), parentPhone: v("parPhone"),
+    };
+    const emName = v("emName"), emPhone = v("emPhone");
+    if (emName && emPhone) c.emergencyContact = { name: emName, phone: emPhone };
+    return c;
+  }
+
   async function createProfile() {
     const oid = ownerId();
     const sport = $("sport").value;
@@ -242,6 +268,7 @@
       identity: { fullName: $("fullName").value.trim(), dateOfBirth: $("dob").value || undefined, sex: $("sex").value },
       sport: { primarySport: sport, positions: [$("position").value], competitionLevel: $("level").value },
       anthropometrics: { heightCm: Number($("height").value), bodyMassKg: Number($("weight").value) },
+      contact: buildContact(),
       nutrition: {
         allergies: checked("allergies").map((a) => ({ allergen: a, severity: "moderate" })),
         dietaryRestrictions: checked("diets"),
@@ -256,6 +283,7 @@
         rememberId(data.ownerId);
         show("profileOut", true, "Saved! Athlete ID " + data.ownerId + "\nName: " + data.identity.fullName);
         $("fullName").value = "";
+        ["athEmail","athPhone","parEmail","parPhone","emName","emPhone"].forEach((id) => ($(id).value = ""));
         newAthleteId(); // ready for the next, different player
         loadProfiles();
       } else if (res.status === 422) {

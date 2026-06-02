@@ -244,6 +244,23 @@ async function main(): Promise<void> {
     check("timeline profile available", false);
   }
 
+  console.log("\nFixtures (events)");
+  const fxOwner = "owner-fx";
+  const fxCreated = await profiles.create(fxOwner, validProfile());
+  const fxId = fxCreated.ok ? fxCreated.value.id : "";
+  const addRes = await profiles.addEvents(fxOwner, fxId, [
+    { type: "match", startTime: "2026-09-05T15:00:00+01:00", importance: "high", conditions: "home" },
+    { type: "training", startTime: "2026-09-07T18:00:00+01:00", importance: "normal" },
+  ]);
+  check("events append succeeds", addRes.ok);
+  const listRes = await profiles.listEvents(fxOwner, fxId);
+  // validProfile() already includes one match event, so 1 + 2 = 3
+  check("events listed and sorted", listRes.ok && listRes.value.length === 3 && listRes.value[0].startTime <= listRes.value[1].startTime);
+  const badAdd = await profiles.addEvents(fxOwner, fxId, [{ type: "match", startTime: "nope", importance: "high" } as never]);
+  check("invalid event datetime rejected", !badAdd.ok);
+  const orphanAdd = await profiles.addEvents(fxOwner, "missing-id", [{ type: "match", startTime: "2026-09-05T15:00:00+01:00", importance: "high" }]);
+  check("add events to unknown profile is 404", !orphanAdd.ok);
+
   db.close();
   console.log(`\n${passed} passed, ${failed} failed`);
   if (failed > 0) process.exit(1);

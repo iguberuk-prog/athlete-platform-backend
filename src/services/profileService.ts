@@ -9,9 +9,10 @@
  * It deliberately knows nothing about HTTP or about which database is in use.
  */
 
-import type { AthleteProfile, ProfileInput } from "../domain/profile.js";
+import type { AthleteProfile, ProfileInput, ScheduledEvent } from "../domain/profile.js";
 import {
   validateProfileInput,
+  validateEventInputs,
   type ValidationError,
 } from "../domain/validation.js";
 import type { AthleteProfileRepository } from "../data/repository.js";
@@ -61,5 +62,37 @@ export class ProfileService {
   async delete(ownerId: string, id: string): Promise<ServiceResult<true>> {
     const removed = await this.repo.delete(ownerId, id);
     return removed ? { ok: true, value: true } : { ok: false, code: "not_found" };
+  }
+
+  /** Append one or more scheduled events (fixtures) to a profile's schedule. */
+  async addEvents(
+    ownerId: string,
+    id: string,
+    events: ScheduledEvent[],
+  ): Promise<ServiceResult<AthleteProfile>> {
+    const result = validateEventInputs(events);
+    if (!result.valid) {
+      return { ok: false, code: "validation", errors: result.errors };
+    }
+    const profile = await this.repo.getById(ownerId, id);
+    if (!profile) return { ok: false, code: "not_found" };
+
+    const { id: _id, ownerId: _o, createdAt: _c, updatedAt: _u, ...input } = profile;
+    const prev = profile.schedule?.events || [];
+    const updated = await this.repo.update(ownerId, id, {
+      ...input,
+      schedule: { ...(profile.schedule || { events: [] }), events: [...prev, ...events] },
+    });
+    return updated ? { ok: true, value: updated } : { ok: false, code: "not_found" };
+  }
+
+  /** Return a profile's scheduled events, soonest first. */
+  async listEvents(ownerId: string, id: string): Promise<ServiceResult<ScheduledEvent[]>> {
+    const profile = await this.repo.getById(ownerId, id);
+    if (!profile) return { ok: false, code: "not_found" };
+    const events = [...(profile.schedule?.events || [])].sort((a, b) =>
+      a.startTime.localeCompare(b.startTime),
+    );
+    return { ok: true, value: events };
   }
 }

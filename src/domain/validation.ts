@@ -410,3 +410,24 @@ export function validateCheckInInput(input: CheckInInput): ValidationResult {
 
   return { valid: errors.length === 0, errors };
 }
+
+// --- standalone: schedule events (for the "add fixture" endpoint) ----------
+
+export function validateEventInputs(events: unknown): ValidationResult {
+  const errors: ValidationError[] = [];
+  if (!isArray(events) || events.length === 0) {
+    errors.push({ path: "events", message: "must be a non-empty array" });
+    return { valid: false, errors };
+  }
+  events.forEach((e, i) => {
+    const base = `events[${i}]`;
+    const ev = e as Record<string, unknown>;
+    enumCheck(errors, `${base}.type`, ev.type, EVENT_TYPES, true);
+    if (!isISODate(ev.startTime))
+      errors.push({ path: `${base}.startTime`, message: "must be an ISO-8601 datetime" });
+    if (ev.importance !== undefined)
+      enumCheck(errors, `${base}.importance`, ev.importance, EVENT_IMPORTANCE, false);
+  });
+  return { valid: errors.length === 0, errors };
+}
+

@@ -57,6 +57,22 @@
   .planfoods { margin-top: 6px; font-size: 12.5px; color: var(--green); }
   .plansafety { padding: 8px 12px; font-size: 12px; color: var(--muted); border-top: 1px solid var(--line); background: var(--grey); }
   .plandisc { padding: 8px 12px; font-size: 11px; color: var(--muted); font-style: italic; }
+  .evcard { margin-top: 10px; border: 1px solid var(--line); border-radius: 8px; padding: 12px; background: var(--grey); }
+  .evtitle { font-weight: 700; color: var(--navy); font-size: 13px; margin-bottom: 4px; }
+  .evrow { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 7px 0; border-top: 1px solid var(--line); }
+  .evtype { font-size: 11px; text-transform: uppercase; letter-spacing: .4px; font-weight: 700; padding: 2px 8px; border-radius: 999px; color: #fff; background: #8794a1; }
+  .evtype.match { background: var(--blue); } .evtype.training { background: var(--green); } .evtype.recovery { background: #8a5a00; } .evtype.travel { background: #6b5bd6; }
+  .evwhen { font-size: 13px; color: var(--text); }
+  .evbtn { padding: 6px 10px; font-size: 12.5px; }
+  .tlwrap { } .tlrow { display: flex; gap: 12px; padding: 9px 12px; border-top: 1px solid var(--line); }
+  .tltime { font-family: ui-monospace, Menlo, Consolas, monospace; font-weight: 700; color: var(--navy); width: 52px; flex: none; }
+  .tlbody { flex: 1; } .tlphase { font-weight: 700; font-size: 13px; color: var(--navy); }
+  .tldetail { font-size: 12.5px; color: var(--text); margin-top: 2px; }
+  .nightbox { padding: 10px 12px; border-top: 1px solid var(--line); background: #1f2c3d0a; }
+  .nightbox ul { margin: 6px 0 0; padding-left: 18px; font-size: 12.5px; }
+  .calbox { padding: 10px 12px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 6px; }
+  .gcal { font-size: 12.5px; color: var(--blue); text-decoration: none; }
+  .gcal:hover { text-decoration: underline; }
 </style>
 </head>
 <body>
@@ -337,10 +353,15 @@
         <div class="pid">${escapeHtml(p.ownerId)}</div>
         <div class="actions" style="margin-top:10px;">
           <button class="primary" onclick="viewPlan('${p.id}','${escapeHtml(p.ownerId)}')">Today's match-day plan</button>
-          <button class="ghost" onclick="quickCheckin('${p.id}','${escapeHtml(p.ownerId)}')">Log today's check-in</button>
+          <button class="ghost" onclick="quickCheckin('${p.id}','${escapeHtml(p.ownerId)}')">Log check-in</button>
+          <button class="ghost" onclick="toggleEventForm('${p.id}','${escapeHtml(p.ownerId)}')">+ Create event</button>
+          <button class="ghost" onclick="loadEvents('${p.id}','${escapeHtml(p.ownerId)}')">Fixtures</button>
         </div>
         <div class="out" id="ci-${p.id}"></div>
+        <div id="evform-${p.id}"></div>
+        <div id="evlist-${p.id}"></div>
         <div id="plan-${p.id}"></div>
+        <div id="timeline-${p.id}"></div>
       </div>`).join("");
   }
 
@@ -394,6 +415,125 @@
     const safety = bits.length ? '<div class="plansafety">' + escapeHtml(bits.join("  \u00B7  ")) + '</div>' : '';
     return '<div class="plan"><div class="plansummary">' + escapeHtml(p.summary) + '</div>' +
       warns + blocks + safety + '<div class="plandisc">' + escapeHtml(p.disclaimer) + '</div></div>';
+  }
+
+  // ---- Fixtures + game-day timeline + calendar ------------------------
+  function toDateStr(d) {
+    return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+  }
+  function showEv(pid, ok, msg) {
+    const el = $("evout-" + pid); if (!el) return;
+    el.className = "out " + (ok ? "ok" : "err"); el.textContent = msg;
+  }
+
+  function toggleEventForm(pid, oid) {
+    const el = $("evform-" + pid);
+    if (el.innerHTML) { el.innerHTML = ""; return; }
+    const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+    el.innerHTML = `
+      <div class="evcard">
+        <div class="evtitle">Create event</div>
+        <div class="row">
+          <div><label>Type</label><select id="evtype-${pid}"><option value="match">Match</option><option value="training">Practice</option><option value="recovery">Recovery</option><option value="travel">Travel</option></select></div>
+          <div><label>Date</label><input id="evdate-${pid}" type="date" /></div>
+          <div><label>Time</label><input id="evtime-${pid}" type="time" value="19:00" /></div>
+        </div>
+        <label>Conditions (optional)</label><input id="evcond-${pid}" placeholder="e.g. home, warm, away" />
+        <label class="chip" style="margin-top:10px;"><input type="checkbox" id="evrep-${pid}" onchange="document.getElementById('evrepwrap-${pid}').style.display=this.checked?'block':'none'"> Repeat weekly (e.g. practices)</label>
+        <div id="evrepwrap-${pid}" style="display:none;margin-top:8px;">
+          <label>On days</label>
+          <div class="chips">${days.map((d, i) => `<label class="chip"><input type="checkbox" value="${(i + 1) % 7}" class="evwd-${pid}"> ${d}</label>`).join("")}</div>
+          <label>Until</label><input id="evuntil-${pid}" type="date" />
+        </div>
+        <div class="actions"><button class="primary" onclick="saveEvent('${pid}','${oid}')">Save event</button></div>
+        <div class="out" id="evout-${pid}"></div>
+      </div>`;
+  }
+
+  async function saveEvent(pid, oid) {
+    const type = $("evtype-" + pid).value;
+    const date = $("evdate-" + pid).value;
+    const time = $("evtime-" + pid).value || "19:00";
+    const conditions = $("evcond-" + pid).value.trim() || undefined;
+    if (!date) { showEv(pid, false, "Pick a date."); return; }
+    const mk = (d) => ({ type, startTime: d + "T" + time, importance: type === "match" ? "high" : "normal", ...(conditions ? { conditions } : {}) });
+    let events = [];
+    if ($("evrep-" + pid).checked) {
+      const until = $("evuntil-" + pid).value;
+      const wds = [...document.querySelectorAll(".evwd-" + pid + ":checked")].map((c) => Number(c.value));
+      if (!until || !wds.length) { showEv(pid, false, "Pick day(s) and an 'until' date for repeats."); return; }
+      let cur = new Date(date + "T00:00:00"); const end = new Date(until + "T00:00:00"); let guard = 0;
+      while (cur <= end && guard++ < 500) { if (wds.includes(cur.getDay())) events.push(mk(toDateStr(cur))); cur.setDate(cur.getDate() + 1); }
+      if (!events.length) { showEv(pid, false, "No matching days in that range."); return; }
+    } else { events = [mk(date)]; }
+    try {
+      const res = await apiAs(oid, "/api/profiles/" + pid + "/events", { method: "POST", body: JSON.stringify({ events }) });
+      const d = await res.json();
+      if (res.status === 201) { showEv(pid, true, events.length + " event(s) saved."); setTimeout(() => { $("evform-" + pid).innerHTML = ""; }, 800); loadEvents(pid, oid); }
+      else showEv(pid, false, (d.error || "error") + (d.message ? ": " + d.message : "") + (d.details ? ": " + d.details.map((x) => x.path + " " + x.message).join(", ") : ""));
+    } catch (e) { showEv(pid, false, "Network error: " + e.message); }
+  }
+
+  async function loadEvents(pid, oid) {
+    const el = $("evlist-" + pid); el.innerHTML = '<p class="muted">Loading fixtures…</p>';
+    try {
+      const res = await apiAs(oid, "/api/profiles/" + pid + "/events");
+      const d = await res.json(); const events = d.events || [];
+      if (!events.length) { el.innerHTML = '<p class="muted">No fixtures yet. Use “Create event”.</p>'; return; }
+      el.innerHTML = '<div class="evcard"><div class="evtitle">Fixtures</div>' + events.map((e) => {
+        const date = e.startTime.slice(0, 10), time = e.startTime.slice(11, 16);
+        return `<div class="evrow"><span class="evtype ${e.type}">${e.type}</span><span class="evwhen">${date} · ${time}${e.conditions ? " · " + escapeHtml(e.conditions) : ""}</span>${e.type === "match" ? `<button class="ghost evbtn" onclick="viewTimeline('${pid}','${escapeHtml(oid)}','${date}','${time}')">Game-day timeline</button>` : ""}</div>`;
+      }).join("") + "</div>";
+    } catch (e) { el.innerHTML = '<p class="muted">Could not load: ' + escapeHtml(e.message) + "</p>"; }
+  }
+
+  async function viewTimeline(pid, oid, date, time) {
+    const el = $("timeline-" + pid); el.innerHTML = '<p class="muted">Building game-day timeline…</p>';
+    const q = "?date=" + encodeURIComponent(date) + "&kickoff=" + encodeURIComponent(time);
+    try {
+      const res = await apiAs(oid, "/api/profiles/" + pid + "/timeline" + q);
+      const t = await res.json();
+      if (!res.ok) { el.innerHTML = '<div class="out err" style="display:block">' + escapeHtml(t.error || "error") + (t.message ? ": " + escapeHtml(t.message) : "") + '</div>'; return; }
+      window.__tl = window.__tl || {}; window.__tl[pid] = t;
+      el.innerHTML = renderTimeline(t, pid);
+    } catch (e) { el.innerHTML = '<div class="out err" style="display:block">' + escapeHtml(e.message) + '</div>'; }
+  }
+
+  function renderTimeline(t, pid) {
+    const warns = (t.safety.warnings || []).map((w) => '<div class="planwarn">⚠ ' + escapeHtml(w) + '</div>').join("");
+    const rows = t.entries.map((e) => `<div class="tlrow"><div class="tltime">${escapeHtml(e.time)}</div><div class="tlbody"><div class="tlphase">${escapeHtml(e.phase)} — ${escapeHtml(e.title)}</div><div class="tldetail">${escapeHtml(e.detail)}</div>${(e.foods && e.foods.length) ? '<div class="planfoods">Foods: ' + e.foods.map(escapeHtml).join(", ") + '</div>' : ''}</div></div>`).join("");
+    const night = '<div class="nightbox"><div class="tlphase">' + escapeHtml(t.nightRoutine.title) + '</div><ul>' + t.nightRoutine.items.map((i) => '<li>' + escapeHtml(i) + '</li>').join("") + '</ul></div>';
+    const gcal = (t.calendar || []).map((ev) => '<a class="gcal" target="_blank" rel="noopener" href="' + gcalLink(ev) + '">+ Add “' + escapeHtml(ev.title) + '” to Google Calendar</a>').join("");
+    const ics = '<button class="ghost" onclick="downloadIcs(\'' + pid + '\')">Download .ics (Apple / Outlook)</button>';
+    return '<div class="plan"><div class="plansummary">Game-day timeline — ' + escapeHtml(t.date) + ' · kickoff ' + escapeHtml(t.kickoff) + (t.playsTomorrow ? ' · plays again tomorrow' : '') + '</div>' + warns + '<div class="tlwrap">' + rows + '</div>' + night + '<div class="calbox">' + gcal + '<div>' + ics + '</div></div><div class="plandisc">' + escapeHtml(t.disclaimer) + '</div></div>';
+  }
+
+  function addMinutesIso(dateStr, min) {
+    const [d, tm] = dateStr.split("T"); const [h, mm] = tm.split(":").map(Number);
+    const base = new Date(d + "T00:00:00"); base.setMinutes(base.getMinutes() + h * 60 + mm + min);
+    return toDateStr(base) + "T" + String(base.getHours()).padStart(2, "0") + ":" + String(base.getMinutes()).padStart(2, "0");
+  }
+  function fmtCal(dateStr) { return dateStr.replace(/[-:]/g, "") + "00"; }
+  function gcalLink(ev) {
+    const start = fmtCal(ev.start), end = fmtCal(addMinutesIso(ev.start, ev.durationMin));
+    const u = new URL("https://calendar.google.com/calendar/render");
+    u.searchParams.set("action", "TEMPLATE"); u.searchParams.set("text", ev.title);
+    u.searchParams.set("dates", start + "/" + end); u.searchParams.set("details", ev.description || "");
+    return u.toString();
+  }
+  function icsEsc(s) { return String(s).replace(/([,;\\])/g, "\\$1").replace(/\n/g, "\\n"); }
+  function downloadIcs(pid) {
+    const t = (window.__tl || {})[pid]; if (!t) return;
+    const lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//AthletePlatform//EN", "CALSCALE:GREGORIAN"];
+    (t.calendar || []).forEach((ev, i) => {
+      lines.push("BEGIN:VEVENT", "UID:" + pid + "-" + i + "-" + t.date + "@athlete",
+        "DTSTART:" + fmtCal(ev.start), "DTEND:" + fmtCal(addMinutesIso(ev.start, ev.durationMin)),
+        "SUMMARY:" + icsEsc(ev.title), "DESCRIPTION:" + icsEsc(ev.description || ""), "END:VEVENT");
+    });
+    lines.push("END:VCALENDAR");
+    const blob = new Blob([lines.join("\r\n")], { type: "text/calendar" });
+    const url = URL.createObjectURL(blob); const a = document.createElement("a");
+    a.href = url; a.download = "gameday-" + t.date + ".ics"; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
   }
 
   function escapeHtml(s) { return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }

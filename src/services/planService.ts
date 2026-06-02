@@ -61,8 +61,9 @@ export class PlanService {
     let conditions = req.conditions;
     let assumedKickoff = !match && !req.kickoff;
     if (match) {
-      const t = new Date(match.startTime);
-      if (!Number.isNaN(t.getTime())) kickoff = t.toISOString().slice(11, 16);
+      // Read the literal HH:MM from the stored ISO string (timezone-safe).
+      const hhmm = match.startTime.slice(11, 16);
+      if (/^\d{2}:\d{2}$/.test(hhmm)) kickoff = hhmm;
       conditions = match.conditions || conditions;
       assumedKickoff = false;
     }
@@ -94,8 +95,8 @@ export class PlanService {
     let kickoff = req.kickoff || "19:00";
     let conditions = req.conditions;
     if (match) {
-      const t = new Date(match.startTime);
-      if (!Number.isNaN(t.getTime())) kickoff = t.toISOString().slice(11, 16);
+      const hhmm = match.startTime.slice(11, 16);
+      if (/^\d{2}:\d{2}$/.test(hhmm)) kickoff = hhmm;
       conditions = match.conditions || conditions;
     }
 

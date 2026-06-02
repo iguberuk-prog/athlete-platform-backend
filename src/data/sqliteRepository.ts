@@ -82,6 +82,13 @@ export class SqliteAthleteProfileRepository implements AthleteProfileRepository 
     return rows.map((r) => this.toProfile(r));
   }
 
+  async listAll(): Promise<AthleteProfile[]> {
+    const rows = this.db
+      .prepare(`SELECT * FROM athlete_profiles ORDER BY created_at`)
+      .all() as ProfileRow[];
+    return rows.map((r) => this.toProfile(r));
+  }
+
   async update(
     ownerId: string,
     id: string,

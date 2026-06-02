@@ -17,6 +17,8 @@ export interface AthleteProfileRepository {
   create(ownerId: string, input: ProfileInput): Promise<AthleteProfile>;
   getById(ownerId: string, id: string): Promise<AthleteProfile | null>;
   listByOwner(ownerId: string): Promise<AthleteProfile[]>;
+  /** Every profile across all owners. Admin-only — call sites must gate access. */
+  listAll(): Promise<AthleteProfile[]>;
   update(ownerId: string, id: string, input: ProfileInput): Promise<AthleteProfile | null>;
   delete(ownerId: string, id: string): Promise<boolean>;
 }

@@ -46,6 +46,11 @@ export class ProfileService {
     return this.repo.listByOwner(ownerId);
   }
 
+  /** All profiles across owners. Admin-only — the caller must authenticate. */
+  async listAll(): Promise<AthleteProfile[]> {
+    return this.repo.listAll();
+  }
+
   async update(
     ownerId: string,
     id: string,

@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Admin · Athlete Performance Platform</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+<style>
+  :root{ --bg:#0d1014; --panel:#141a21; --panel2:#181f28; --line:#26303c; --line2:#34414f;
+    --text:#eaf1f8; --muted:#93a1b2; --dim:#6b7888; --lime:#bff63f; --lime2:#a9e426; --ink:#0d1014;
+    --danger:#ff6b6b; --r:14px; --r2:10px; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:'Inter',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;color:var(--text);line-height:1.5;
+    background:radial-gradient(1100px 560px at 50% -220px,#16202b 0%,var(--bg) 62%) no-repeat fixed,var(--bg);-webkit-font-smoothing:antialiased}
+  header{position:sticky;top:0;z-index:20;background:rgba(13,16,20,.82);backdrop-filter:saturate(140%) blur(10px);border-bottom:1px solid var(--line)}
+  .brand{display:flex;align-items:center;gap:12px}
+  .mark{width:32px;height:32px;border-radius:9px;background:linear-gradient(135deg,var(--lime),#7fd400);display:grid;place-items:center;color:var(--ink);font-weight:900;font-size:17px}
+  .brand h1{margin:0;font-size:16px;font-weight:800}
+  header p{margin:2px 0 0;color:var(--muted);font-size:12.5px}
+  .wrap{max-width:920px;margin:0 auto;padding:22px 20px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:22px;margin-bottom:18px;box-shadow:0 12px 34px rgba(0,0,0,.28)}
+  h2{margin:0 0 4px;font-size:17px;font-weight:700}
+  .sub{color:var(--muted);font-size:13px;margin:0 0 16px}
+  label{display:block;font-size:12.5px;font-weight:600;margin:6px 0 6px;color:#c4d0dd}
+  input{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:var(--r2);font-size:14px;background:#0f151c;color:var(--text);font-family:inherit}
+  input:focus{outline:none;border-color:var(--lime);box-shadow:0 0 0 3px rgba(191,246,63,.16)}
+  button{cursor:pointer;border:none;border-radius:var(--r2);font-size:14px;font-weight:700;padding:11px 18px;font-family:inherit}
+  .primary{background:var(--lime);color:var(--ink)}
+  .ghost{background:#1a222c;color:var(--text);border:1px solid var(--line)}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  .err{margin-top:12px;font-size:13px;padding:10px 12px;border-radius:var(--r2);background:rgba(255,107,107,.1);border:1px solid rgba(255,107,107,.35);color:#ffb4b4;display:none}
+  .err.show{display:block}
+  .toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+  .count{font-size:13px;color:var(--muted)}
+  .count b{color:var(--lime);font-size:18px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px}
+  .ath{border:1px solid var(--line);border-radius:var(--r);background:var(--panel2);padding:16px}
+  .ahead{display:flex;align-items:center;gap:12px;margin-bottom:12px}
+  .avatar{width:48px;height:48px;border-radius:50%;flex:none;overflow:hidden;border:1px solid var(--line2);background:linear-gradient(135deg,#27425f,#16202b);display:grid;place-items:center;color:var(--lime);font-weight:800;font-size:16px}
+  .avatar img{width:100%;height:100%;object-fit:cover}
+  .aname{font-weight:700;font-size:15px}
+  .ameta{color:var(--muted);font-size:12px;margin-top:2px}
+  .pid{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11.5px;color:var(--lime);background:rgba(191,246,63,.08);border:1px solid rgba(191,246,63,.22);padding:2px 8px;border-radius:6px;display:inline-block}
+  .frow{display:flex;justify-content:space-between;gap:10px;font-size:12.5px;padding:5px 0;border-top:1px solid var(--line)}
+  .frow .k{color:var(--muted)}
+  .frow .v{color:var(--text);text-align:right;word-break:break-word}
+  .tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+  .tag{font-size:11px;padding:2px 8px;border-radius:999px;background:#1a222c;border:1px solid var(--line);color:var(--muted)}
+  .tag.warn{color:#ffb4b4;border-color:rgba(255,107,107,.3);background:rgba(255,107,107,.08)}
+  .muted{color:var(--muted);font-size:13px}
+</style>
+</head>
+<body>
+<header><div class="wrap" style="padding-top:14px;padding-bottom:14px"><div class="brand"><div class="mark">A</div><div><h1>Admin · Athlete Performance Platform</h1><p>Coach / staff dashboard</p></div></div></div></header>
+
+<div class="wrap">
+  <div class="card" id="login">
+    <h2>Sign in</h2>
+    <p class="sub">Enter your admin passcode to view every athlete who has signed up.</p>
+    <label>Admin passcode</label>
+    <input id="key" type="password" placeholder="••••••••" onkeydown="if(event.key==='Enter')signIn()" />
+    <div class="row" style="margin-top:14px"><button class="primary" onclick="signIn()">Sign in</button></div>
+    <div class="err" id="loginErr"></div>
+  </div>
+
+  <div class="card" id="dash" style="display:none">
+    <div class="toolbar">
+      <div class="count">Total athletes: <b id="count">0</b></div>
+      <div class="row">
+        <button class="ghost" onclick="load()">Refresh</button>
+        <button class="ghost" onclick="signOut()">Sign out</button>
+      </div>
+    </div>
+    <div class="err" id="dashErr"></div>
+    <div class="grid" id="roster"></div>
+  </div>
+</div>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  const SPORTS = { soccer:"Soccer", basketball:"Basketball", american_football:"American football", baseball:"Baseball",
+    track:"Track & field", cross_country:"Cross country", swimming:"Swimming", volleyball:"Volleyball",
+    lacrosse:"Lacrosse", hockey:"Hockey", tennis:"Tennis", other:"Other" };
+  function escapeHtml(s){ return String(s==null?"":s).replace(/[&<>"]/g,(c)=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+  function age(dob){ if(!dob) return null; const d=new Date(dob); if(isNaN(d)) return null; const t=new Date(); let a=t.getFullYear()-d.getFullYear(); const m=t.getMonth()-d.getMonth(); if(m<0||(m===0&&t.getDate()<d.getDate()))a--; return a; }
+  function ftIn(cm){ if(!cm) return "—"; const tot=Math.round(cm/2.54); return Math.floor(tot/12)+"' "+(tot%12)+'"'; }
+  function lb(kg){ return kg? Math.round(kg/0.453592)+" lb" : "—"; }
+  function getKey(){ try{ return sessionStorage.getItem("adminKey")||""; }catch{ return ""; } }
+
+  async function signIn(){
+    const k = $("key").value.trim();
+    if(!k){ return; }
+    try{ sessionStorage.setItem("adminKey", k); }catch{}
+    await load(true);
+  }
+  function signOut(){ try{ sessionStorage.removeItem("adminKey"); }catch{} $("dash").style.display="none"; $("login").style.display=""; $("key").value=""; }
+
+  async function load(fromLogin){
+    const k = getKey(); if(!k){ signOut(); return; }
+    const errEl = fromLogin ? $("loginErr") : $("dashErr");
+    errEl.classList.remove("show");
+    try{
+      const res = await fetch("/api/admin/athletes", { headers: { "x-admin-key": k } });
+      if(res.status===401){ errEl.textContent="Wrong passcode."; errEl.classList.add("show"); return; }
+      if(res.status===503){ errEl.textContent="Admin isn't configured yet — set the ADMIN_KEY environment variable in Netlify, then redeploy."; errEl.classList.add("show"); return; }
+      if(!res.ok){ const d=await res.json().catch(()=>({})); errEl.textContent="Error: "+(d.error||res.status)+(d.message?" — "+d.message:""); errEl.classList.add("show"); return; }
+      const data = await res.json();
+      $("login").style.display="none"; $("dash").style.display="";
+      render(data.athletes||[]);
+    }catch(e){ errEl.textContent="Network error: "+e.message; errEl.classList.add("show"); }
+  }
+
+  function initials(name){ const p=String(name||"").trim().split(/\s+/); return ((p[0]||"")[0]||"")+((p[1]||"")[0]||"")||"?"; }
+
+  function render(list){
+    $("count").textContent = list.length;
+    if(!list.length){ $("roster").innerHTML='<p class="muted">No athletes have signed up yet.</p>'; return; }
+    $("roster").innerHTML = list.map((p)=>{
+      const id=p.identity||{}, sp=p.sport||{}, an=p.anthropometrics||{}, c=p.contact||{}, n=p.nutrition||{};
+      const av = id.avatarUrl ? '<img src="'+id.avatarUrl+'" alt="">' : escapeHtml(initials(id.fullName));
+      const a = age(id.dateOfBirth); const ageStr = a!=null ? a+" yrs" : (id.age!=null? id.age+" yrs":"—");
+      const allergies=(n.allergies||[]).map((x)=>'<span class="tag warn">'+escapeHtml(x.allergen||x)+'</span>').join("");
+      const diets=(n.dietaryRestrictions||[]).map((x)=>'<span class="tag">'+escapeHtml(x)+'</span>').join("");
+      const tags = allergies+diets;
+      const frow=(k,v)=>'<div class="frow"><span class="k">'+k+'</span><span class="v">'+v+'</span></div>';
+      return '<div class="ath">'
+        + '<div class="ahead"><div class="avatar">'+av+'</div><div><div class="aname">'+escapeHtml(id.fullName||"Unnamed")+'</div>'
+        + '<div class="ameta">'+escapeHtml(SPORTS[sp.primarySport]||sp.primarySport||"")+' · '+escapeHtml((sp.positions||[]).join(", "))+'</div></div></div>'
+        + '<div style="margin-bottom:8px"><span class="pid">'+escapeHtml(p.ownerId||"")+'</span></div>'
+        + frow("Age", escapeHtml(ageStr))
+        + frow("Height / weight", ftIn(an.heightCm)+" · "+lb(an.bodyMassKg))
+        + frow("Level", escapeHtml(sp.competitionLevel||"—"))
+        + frow("Athlete email", escapeHtml(c.athleteEmail||"—"))
+        + frow("Parent email", escapeHtml(c.parentEmail||"—"))
+        + (tags ? '<div class="tags">'+tags+'</div>' : '')
+        + '</div>';
+    }).join("");
+  }
+
+  if(getKey()){ load(false); }
+</script>
+</body>
+</html>

@@ -92,6 +92,15 @@ export class SupabaseAthleteProfileRepository implements AthleteProfileRepositor
     return (data ?? []).map((r) => r.data as AthleteProfile);
   }
 
+  async listAll(): Promise<AthleteProfile[]> {
+    const { data, error } = await this.client
+      .from(PROFILES)
+      .select("data")
+      .order("created_at", { ascending: true });
+    if (error) throw error;
+    return (data ?? []).map((r) => r.data as AthleteProfile);
+  }
+
   async update(
     ownerId: string,
     id: string,

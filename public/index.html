@@ -128,7 +128,7 @@
   .tlrow:first-child { border-top: none; }
   .tlhead { width: 100%; display: flex; align-items: center; gap: 12px; padding: 11px 14px; background: transparent; border: none; cursor: pointer; text-align: left; font: inherit; color: var(--text); }
   .tlhead:hover { background: #131a22; }
-  .tltime { font-family: ui-monospace, Menlo, Consolas, monospace; font-weight: 700; color: var(--lime); width: 54px; flex: none; }
+  .tltime { font-family: ui-monospace, Menlo, Consolas, monospace; font-weight: 700; color: var(--lime); width: 74px; flex: none; }
   .tlbody { flex: 1; } .tlphase { font-weight: 700; font-size: 13px; color: var(--text); }
   .tlchev { margin-left: auto; color: var(--muted); transition: transform .15s ease; flex: none; }
   .tlhead[aria-expanded="true"] .tlchev { transform: rotate(180deg); }
@@ -153,7 +153,7 @@
   .calband { position: absolute; left: 2px; right: 2px; background: rgba(255,107,107,.12); border: 1px solid rgba(255,107,107,.4); border-radius: 6px; color: #ffb4b4; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .5px; padding: 3px 6px; z-index: 1; }
   .calevent { position: absolute; border: none; border-radius: 7px; padding: 4px 8px; text-align: left; cursor: pointer; overflow: hidden; font-family: inherit; color: var(--ink); z-index: 2; box-shadow: 0 2px 8px rgba(0,0,0,.25); display: flex; flex-direction: column; gap: 1px; line-height: 1.15; }
   .calevent .cetime { font-size: 10px; font-weight: 700; opacity: .8; }
-  .calevent .cephase { font-size: 11.5px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .calevent .cephase { font-size: 11.5px; font-weight: 800; line-height: 1.15; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
   .calevent.meal { background: var(--lime); }
   .calevent.game { background: #ff7a6b; color: #1b0f0e; }
   .calevent.recover { background: var(--violet); }
@@ -574,7 +574,7 @@
       if (!events.length) { el.innerHTML = '<p class="muted">No fixtures yet. Use “Create event”.</p>'; return; }
       el.innerHTML = '<div class="evcard"><div class="evtitle">Fixtures</div>' + events.map((e) => {
         const date = e.startTime.slice(0, 10), time = e.startTime.slice(11, 16);
-        return `<div class="evrow"><span class="evtype ${e.type}">${e.type}</span><span class="evwhen">${date} · ${time}${e.conditions ? " · " + escapeHtml(e.conditions) : ""}</span>${e.type === "match" ? `<button class="ghost evbtn" onclick="viewTimeline('${pid}','${escapeHtml(oid)}','${date}','${time}')">Game-day timeline</button>` : ""}</div>`;
+        return `<div class="evrow"><span class="evtype ${e.type}">${e.type}</span><span class="evwhen">${date} · ${to12(time)}${e.conditions ? " · " + escapeHtml(e.conditions) : ""}</span>${e.type === "match" ? `<button class="ghost evbtn" onclick="viewTimeline('${pid}','${escapeHtml(oid)}','${date}','${time}')">Game-day timeline</button>` : ""}</div>`;
       }).join("") + "</div>";
     } catch (e) { el.innerHTML = '<p class="muted">Could not load: ' + escapeHtml(e.message) + "</p>"; }
   }
@@ -622,7 +622,7 @@
     const rows = t.entries.map((e) =>
       '<div class="tlrow">' +
         '<button type="button" class="tlhead" aria-expanded="false" onclick="toggleTl(this)">' +
-          '<span class="tltime">' + escapeHtml(e.time) + '</span>' +
+          '<span class="tltime">' + escapeHtml(to12(e.time)) + '</span>' +
           '<span class="tlphase">' + escapeHtml(e.phase) + '</span>' +
           '<span class="tlchev">▾</span>' +
         '</button>' +
@@ -644,15 +644,17 @@
     const night = '<div class="nightbox"><div class="tlphase">' + escapeHtml(t.nightRoutine.title) + '</div><ul>' + t.nightRoutine.items.map((i) => '<li>' + escapeHtml(i) + '</li>').join("") + '</ul></div>';
     const gcal = (t.calendar || []).map((ev) => '<a class="gcal" target="_blank" rel="noopener" href="' + gcalLink(ev) + '">+ Add “' + escapeHtml(ev.title) + '” to Google Calendar</a>').join("");
     const ics = '<button class="ghost" onclick="downloadIcs(\'' + pid + '\')">Download .ics (Apple / Outlook)</button>';
-    return '<div class="plan"><div class="plansummary">Game-day plan — ' + escapeHtml(t.date) + ' · kickoff ' + escapeHtml(t.kickoff) + (t.playsTomorrow ? ' · plays again tomorrow' : '') + '</div>' + warns + dayBefore + '<div class="tlgdhead">Game day</div>' + toggle + calView + listView + night + '<div class="calbox">' + gcal + '<div>' + ics + '</div></div><div class="plandisc">' + escapeHtml(t.disclaimer) + '</div></div>';
+    return '<div class="plan"><div class="plansummary">Game-day plan — ' + escapeHtml(t.date) + ' · kickoff ' + escapeHtml(to12(t.kickoff)) + (t.playsTomorrow ? ' · plays again tomorrow' : '') + '</div>' + warns + dayBefore + '<div class="tlgdhead">Game day</div>' + toggle + calView + listView + night + '<div class="calbox">' + gcal + '<div>' + ics + '</div></div><div class="plandisc">' + escapeHtml(t.disclaimer) + '</div></div>';
   }
 
   // ---- Calendar (Google-Calendar-style day grid) ------------------------
-  const CAL_PX = 0.95; // pixels per minute
+  const CAL_PX = 1.1; // pixels per minute
   const CAL_COLOR = { "Wake-up":"wake","Pre-game meal":"meal","Pre-game top-up":"meal","Kickoff":"game","Half-time":"game","Full time":"game","Immediate recovery":"recover","Evening meal":"meal","Night routine":"night","Bed":"night" };
   const CAL_DUR = { "Pre-game meal":45,"Evening meal":45,"Kickoff":30,"Half-time":20,"Full time":20,"Immediate recovery":25,"Wake-up":30,"Pre-game top-up":20,"Night routine":30,"Bed":15 };
   function calMin(hm) { const a = String(hm || "0:0").split(":"); return (Number(a[0]) || 0) * 60 + (Number(a[1]) || 0); }
   function fmt12(h) { const ap = h >= 12 ? "PM" : "AM"; let hh = h % 12; if (hh === 0) hh = 12; return hh + " " + ap; }
+  function to12(hm) { const a = String(hm || "").split(":"); let h = Number(a[0]) || 0; const m = (a[1] || "00").padStart(2, "0"); const ap = h >= 12 ? "PM" : "AM"; h = h % 12; if (h === 0) h = 12; return h + ":" + m + " " + ap; }
+  function assignLanes(cl) { const laneEnd = []; cl.forEach((ev) => { let lane = 0; while (lane < laneEnd.length && laneEnd[lane] > ev.s) lane++; ev.lane = lane; laneEnd[lane] = ev.s + ev.d; }); const n = Math.max(1, laneEnd.length); cl.forEach((ev) => { ev.lanes = n; }); }
 
   function buildCalendar(t, pid) {
     const entMins = (t.entries || []).map((e) => calMin(e.time));
@@ -678,15 +680,15 @@
     }
 
     const evs = (t.entries || []).map((e, i) => ({ i: i, e: e, s: calMin(e.time), d: CAL_DUR[e.phase] || 30 })).sort((a, b) => a.s - b.s);
-    const laneEnd = [];
-    evs.forEach((ev) => { let lane = 0; while (lane < laneEnd.length && laneEnd[lane] > ev.s) lane++; ev.lane = lane; laneEnd[lane] = ev.s + ev.d; });
-    const lanes = Math.max(1, laneEnd.length);
+    let cluster = [], cEnd = -1;
+    evs.forEach((ev) => { if (cluster.length && ev.s >= cEnd) { assignLanes(cluster); cluster = []; cEnd = -1; } cluster.push(ev); cEnd = Math.max(cEnd, ev.s + ev.d); });
+    if (cluster.length) assignLanes(cluster);
     const evhtml = evs.map((ev) => {
-      const top = (ev.s - gStart) * CAL_PX, ht = Math.max(24, ev.d * CAL_PX);
-      const w = 100 / lanes, left = ev.lane * w;
+      const top = (ev.s - gStart) * CAL_PX, ht = Math.max(34, ev.d * CAL_PX);
+      const w = 100 / ev.lanes, left = ev.lane * w;
       const cls = CAL_COLOR[ev.e.phase] || "wake";
       return '<button type="button" class="calevent ' + cls + '" style="top:' + top + 'px;height:' + ht + 'px;left:calc(' + left + '% + 2px);width:calc(' + w + '% - 4px)" onclick="showCalDetail(\'' + pid + '\',' + ev.i + ')">' +
-        '<span class="cetime">' + escapeHtml(ev.e.time) + '</span>' +
+        '<span class="cetime">' + escapeHtml(to12(ev.e.time)) + '</span>' +
         '<span class="cephase">' + escapeHtml(ev.e.phase) + '</span></button>';
     }).join("");
 
@@ -699,7 +701,7 @@
     const t = (window.__tl || {})[pid]; if (!t) return;
     const e = (t.entries || [])[idx]; if (!e) return;
     const el = document.getElementById("caldetail-" + pid); if (!el) return;
-    el.innerHTML = '<div class="cdtime">' + escapeHtml(e.time) + ' · ' + escapeHtml(e.phase) + '</div>' +
+    el.innerHTML = '<div class="cdtime">' + escapeHtml(to12(e.time)) + ' · ' + escapeHtml(e.phase) + '</div>' +
       '<div class="tltitle2">' + escapeHtml(e.title) + '</div>' +
       '<div class="tldetail">' + escapeHtml(e.detail) + '</div>' + foodsHtml(e.foods);
   }

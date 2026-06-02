@@ -4,106 +4,178 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Athlete Performance Platform</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
 <style>
   :root {
-    --navy: #1f3a5f; --blue: #2e75b6; --light: #eaf1f8; --green: #1e8c5a;
-    --grey: #f4f6f9; --line: #d9e2ec; --text: #1c2733; --muted: #5a6b7b; --red: #c0392b;
+    --bg:#0d1014; --panel:#141a21; --panel2:#181f28;
+    --line:#26303c; --line2:#34414f;
+    --text:#eaf1f8; --muted:#93a1b2; --dim:#6b7888;
+    --lime:#bff63f; --lime2:#a9e426; --ink:#0d1014;
+    --danger:#ff6b6b; --warn:#ffd166; --info:#5cc8ff; --violet:#b39dff;
+    --r:14px; --r2:10px;
   }
   * { box-sizing: border-box; }
-  body { margin: 0; font-family: -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
-    color: var(--text); background: var(--grey); }
-  header { background: var(--navy); color: #fff; padding: 22px 20px; }
-  header h1 { margin: 0; font-size: 20px; letter-spacing: .3px; }
-  header p { margin: 4px 0 0; color: #b9cce0; font-size: 13px; }
-  .wrap { max-width: 760px; margin: 0 auto; padding: 20px; }
-  .card { background: #fff; border: 1px solid var(--line); border-radius: 10px;
-    padding: 20px; margin-bottom: 18px; box-shadow: 0 1px 2px rgba(0,0,0,.04); }
-  .card h2 { margin: 0 0 4px; font-size: 16px; color: var(--navy); }
-  .card .sub { color: var(--muted); font-size: 13px; margin: 0 0 16px; }
-  label { display: block; font-size: 13px; font-weight: 600; margin: 12px 0 5px; color: #33424f; }
-  input, select { width: 100%; padding: 9px 10px; border: 1px solid var(--line);
-    border-radius: 7px; font-size: 14px; background: #fff; color: var(--text); }
-  input:focus, select:focus { outline: none; border-color: var(--blue); }
-  input[readonly] { background: #eef3f8; color: var(--navy); font-weight: 700; letter-spacing: .5px;
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    color: var(--text); line-height: 1.5; -webkit-font-smoothing: antialiased;
+    background: radial-gradient(1100px 560px at 50% -220px, #16202b 0%, var(--bg) 62%) no-repeat fixed, var(--bg); }
+  a { color: var(--lime); }
+
+  header { position: sticky; top: 0; z-index: 20; background: rgba(13,16,20,.82);
+    backdrop-filter: saturate(140%) blur(10px); border-bottom: 1px solid var(--line); }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .mark { width: 32px; height: 32px; border-radius: 9px; flex: none;
+    background: linear-gradient(135deg, var(--lime), #7fd400); display: grid; place-items: center;
+    color: var(--ink); font-weight: 900; font-size: 17px; box-shadow: 0 4px 16px rgba(191,246,63,.28); }
+  .brand h1 { margin: 0; font-size: 16px; font-weight: 800; letter-spacing: .2px; }
+  header p { margin: 2px 0 0; color: var(--muted); font-size: 12.5px; }
+
+  .wrap { max-width: 800px; margin: 0 auto; padding: 22px 20px; }
+  .hero { margin: 8px 2px 20px; }
+  .hero h2 { font-size: 27px; font-weight: 800; letter-spacing: -.5px; margin: 0 0 8px; line-height: 1.12; }
+  .hero h2 .hl { color: var(--lime); }
+  .hero p { color: var(--muted); font-size: 14.5px; margin: 0; max-width: 62ch; }
+
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r);
+    padding: 22px; margin-bottom: 18px; box-shadow: 0 1px 0 rgba(255,255,255,.02) inset, 0 12px 34px rgba(0,0,0,.28); }
+  .card h2 { margin: 0 0 4px; font-size: 17px; font-weight: 700; color: var(--text); }
+  .card .sub { color: var(--muted); font-size: 13px; margin: 0 0 18px; }
+
+  label { display: block; font-size: 12.5px; font-weight: 600; margin: 14px 0 6px; color: #c4d0dd; letter-spacing: .1px; }
+  input, select { width: 100%; padding: 11px 12px; border: 1px solid var(--line); border-radius: var(--r2);
+    font-size: 14px; background: #0f151c; color: var(--text); font-family: inherit; transition: border-color .15s, box-shadow .15s; }
+  input::placeholder { color: #5d6b7b; }
+  input:focus, select:focus { outline: none; border-color: var(--lime); box-shadow: 0 0 0 3px rgba(191,246,63,.16); }
+  select { appearance: none; -webkit-appearance: none; padding-right: 34px;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path d='M2 4l4 4 4-4' fill='none' stroke='%2393a1b2' stroke-width='1.6'/></svg>");
+    background-repeat: no-repeat; background-position: right 12px center; }
+  input[readonly] { background: #0c1218; color: var(--lime); font-weight: 700; letter-spacing: .5px;
     font-family: ui-monospace, Menlo, Consolas, monospace; }
+  input[type=date] { color-scheme: dark; }
   .row { display: flex; gap: 14px; flex-wrap: wrap; }
   .row > div { flex: 1 1 200px; }
+
+  .photopick { display: flex; align-items: center; gap: 16px; margin: 6px 0 2px; }
+  .avatarbig { width: 84px; height: 84px; border-radius: 50%; flex: none; object-fit: cover; overflow: hidden;
+    border: 2px solid var(--line); background: #0f151c; display: grid; place-items: center;
+    color: var(--dim); font-size: 11.5px; text-align: center; line-height: 1.2; }
+  .avatarbig img { width: 100%; height: 100%; object-fit: cover; }
+
   .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
-  .chip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px;
-    border: 1px solid var(--line); border-radius: 999px; font-size: 13px; cursor: pointer; user-select: none; }
-  .chip input { width: auto; }
-  button { cursor: pointer; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; padding: 11px 18px; }
-  .primary { background: var(--blue); color: #fff; }
-  .primary:hover { background: #285f92; }
-  .ghost { background: #eef3f8; color: var(--navy); }
-  .actions { margin-top: 18px; display: flex; gap: 10px; flex-wrap: wrap; }
-  .out { margin-top: 14px; font-size: 13px; padding: 12px 14px; border-radius: 8px; display: none; white-space: pre-wrap; word-break: break-word; }
-  .out.ok { display: block; background: #e8f6ee; border: 1px solid #b6e0c6; color: #14543a; }
-  .out.err { display: block; background: #fcebea; border: 1px solid #f0c4c0; color: #7a241d; }
-  .profile { border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; margin-top: 10px; }
-  .profile .pname { font-weight: 700; color: var(--navy); }
-  .profile .pmeta { color: var(--muted); font-size: 12px; margin-top: 2px; }
-  .profile .pid { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; color: var(--navy); margin-top: 4px; }
+  .chip { display: inline-flex; align-items: center; gap: 7px; padding: 8px 12px; border: 1px solid var(--line);
+    border-radius: 999px; font-size: 13px; cursor: pointer; user-select: none; color: var(--muted); background: #0f151c; transition: .15s; }
+  .chip:hover { border-color: var(--line2); }
+  .chip input { width: auto; accent-color: var(--lime); }
+  .chip:has(input:checked) { border-color: var(--lime); color: var(--text); background: rgba(191,246,63,.10); }
+
+  button { cursor: pointer; border: none; border-radius: var(--r2); font-size: 14px; font-weight: 700;
+    padding: 12px 18px; font-family: inherit; transition: transform .12s, background .15s, border-color .15s; }
+  .primary { background: var(--lime); color: var(--ink); box-shadow: 0 6px 18px rgba(191,246,63,.18); }
+  .primary:hover { background: var(--lime2); transform: translateY(-1px); }
+  .ghost { background: #1a222c; color: var(--text); border: 1px solid var(--line); }
+  .ghost:hover { border-color: var(--line2); background: #1f2935; }
+  .actions { margin-top: 20px; display: flex; gap: 10px; flex-wrap: wrap; }
+
+  .out { margin-top: 16px; font-size: 13px; padding: 12px 14px; border-radius: var(--r2); display: none; white-space: pre-wrap; word-break: break-word; }
+  .out.ok { display: block; background: rgba(191,246,63,.10); border: 1px solid rgba(191,246,63,.35); color: #d7f59a; }
+  .out.err { display: block; background: rgba(255,107,107,.10); border: 1px solid rgba(255,107,107,.35); color: #ffb4b4; }
   .muted { color: var(--muted); font-size: 13px; }
-  .hint { font-size: 12px; color: var(--muted); margin-top: 4px; }
-  .plan { margin-top: 12px; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
-  .plansummary { background: var(--navy); color: #fff; padding: 10px 12px; font-size: 13px; }
-  .planwarn { background: #fff6e6; color: #8a5a00; padding: 8px 12px; font-size: 12.5px; border-bottom: 1px solid var(--line); }
-  .planblock { padding: 10px 12px; border-top: 1px solid var(--line); }
-  .planphase { font-weight: 700; color: var(--navy); font-size: 13.5px; }
+  .hint { font-size: 12px; color: var(--dim); margin-top: 5px; }
+
+  .profile { border: 1px solid var(--line); border-radius: var(--r); padding: 16px; margin-top: 12px; background: var(--panel2); }
+  .phead { display: flex; align-items: center; gap: 14px; }
+  .pinfo { min-width: 0; }
+  .avatar { width: 48px; height: 48px; border-radius: 50%; flex: none; object-fit: cover; overflow: hidden;
+    border: 1px solid var(--line2); background: linear-gradient(135deg, #27425f, #16202b);
+    display: grid; place-items: center; color: var(--lime); font-weight: 800; font-size: 16px; }
+  .avatar img { width: 100%; height: 100%; object-fit: cover; }
+  .pname { font-weight: 700; color: var(--text); font-size: 15px; }
+  .pmeta { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .pid { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11.5px; color: var(--lime); margin-top: 5px;
+    display: inline-block; background: rgba(191,246,63,.08); border: 1px solid rgba(191,246,63,.22); padding: 2px 8px; border-radius: 6px; }
+
+  .plan { margin-top: 14px; border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; background: var(--panel2); }
+  .plansummary { background: #0f151c; color: var(--lime); padding: 12px 14px; font-size: 13px; font-weight: 600; border-bottom: 1px solid var(--line); }
+  .planwarn { background: rgba(255,209,102,.10); color: #ffd98a; padding: 9px 14px; font-size: 12.5px; border-bottom: 1px solid var(--line); }
+  .planblock { padding: 12px 14px; border-top: 1px solid var(--line); }
+  .planphase { font-weight: 700; color: var(--text); font-size: 13.5px; }
   .plantiming { color: var(--muted); font-size: 12px; margin-bottom: 6px; }
-  .plantargets { margin: 0; padding-left: 18px; font-size: 13px; }
-  .plantargets li { margin: 2px 0; }
-  .planfoods { margin-top: 6px; font-size: 12.5px; color: var(--green); }
-  .plansafety { padding: 8px 12px; font-size: 12px; color: var(--muted); border-top: 1px solid var(--line); background: var(--grey); }
-  .plandisc { padding: 8px 12px; font-size: 11px; color: var(--muted); font-style: italic; }
-  .evcard { margin-top: 10px; border: 1px solid var(--line); border-radius: 8px; padding: 12px; background: var(--grey); }
-  .evtitle { font-weight: 700; color: var(--navy); font-size: 13px; margin-bottom: 4px; }
-  .evrow { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 7px 0; border-top: 1px solid var(--line); }
-  .evtype { font-size: 11px; text-transform: uppercase; letter-spacing: .4px; font-weight: 700; padding: 2px 8px; border-radius: 999px; color: #fff; background: #8794a1; }
-  .evtype.match { background: var(--blue); } .evtype.training { background: var(--green); } .evtype.recovery { background: #8a5a00; } .evtype.travel { background: #6b5bd6; }
+  .plantargets { margin: 0; padding-left: 18px; font-size: 13px; color: #cdd8e3; }
+  .plantargets li { margin: 3px 0; }
+  .planfoods { margin-top: 6px; font-size: 12.5px; color: var(--lime); }
+  .plansafety { padding: 9px 14px; font-size: 12px; color: var(--muted); border-top: 1px solid var(--line); background: #0f151c; }
+  .plandisc { padding: 9px 14px; font-size: 11px; color: var(--dim); font-style: italic; }
+
+  .evcard { margin-top: 12px; border: 1px solid var(--line); border-radius: var(--r); padding: 14px; background: #0f151c; }
+  .evtitle { font-weight: 700; color: var(--text); font-size: 13px; margin-bottom: 4px; }
+  .evrow { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 0; border-top: 1px solid var(--line); }
+  .evtype { font-size: 11px; text-transform: uppercase; letter-spacing: .4px; font-weight: 700; padding: 2px 9px; border-radius: 999px; color: var(--ink); background: #8794a1; }
+  .evtype.match { background: var(--lime); } .evtype.training { background: var(--info); } .evtype.recovery { background: var(--warn); } .evtype.travel { background: var(--violet); }
   .evwhen { font-size: 13px; color: var(--text); }
-  .evbtn { padding: 6px 10px; font-size: 12.5px; }
-  .daybefore { margin: 4px 12px 0; border: 1px solid var(--line); border-radius: 8px; background: #6b5bd60a; overflow: hidden; }
-  .dbhead { font-weight: 700; font-size: 12.5px; color: var(--navy); padding: 9px 12px; background: #6b5bd615; border-bottom: 1px solid var(--line); }
-  .dbrow { display: flex; gap: 12px; padding: 9px 12px; border-top: 1px solid var(--line); }
+  .evbtn { padding: 7px 11px; font-size: 12.5px; }
+
+  .tlgdhead { font-weight: 700; font-size: 12.5px; color: var(--text); padding: 14px 14px 6px; }
+  .daybefore { margin: 4px 14px 0; border: 1px solid var(--line); border-radius: var(--r2); background: rgba(124,156,255,.06); overflow: hidden; }
+  .dbhead { font-weight: 700; font-size: 12.5px; color: #bcd0ff; padding: 10px 14px; background: rgba(124,156,255,.10); border-bottom: 1px solid var(--line); }
+  .dbrow { display: flex; gap: 12px; padding: 10px 14px; border-top: 1px solid var(--line); }
   .dbrow:first-of-type { border-top: none; }
-  .dbwhen { font-size: 11px; text-transform: uppercase; letter-spacing: .4px; font-weight: 700; color: #6b5bd6; width: 116px; flex: none; padding-top: 1px; }
+  .dbwhen { font-size: 11px; text-transform: uppercase; letter-spacing: .4px; font-weight: 700; color: #9db4ff; width: 118px; flex: none; padding-top: 1px; }
   .dbbody { flex: 1; }
-  .tlgdhead { font-weight: 700; font-size: 12.5px; color: var(--navy); padding: 12px 12px 6px; }
-  .tlwrap { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; margin: 0 12px; }
+  .tlwrap { border: 1px solid var(--line); border-radius: var(--r2); overflow: hidden; margin: 0 14px; }
   .tlrow { border-top: 1px solid var(--line); }
   .tlrow:first-child { border-top: none; }
-  .tlhead { width: 100%; display: flex; align-items: center; gap: 12px; padding: 10px 12px; background: #fff; border: none; cursor: pointer; text-align: left; font: inherit; }
-  .tlhead:hover { background: var(--grey); }
-  .tltime { font-family: ui-monospace, Menlo, Consolas, monospace; font-weight: 700; color: var(--navy); width: 52px; flex: none; }
-  .tlbody { flex: 1; } .tlphase { font-weight: 700; font-size: 13px; color: var(--navy); }
-  .tlchev { margin-left: auto; color: #8794a1; transition: transform .15s ease; flex: none; }
+  .tlhead { width: 100%; display: flex; align-items: center; gap: 12px; padding: 11px 14px; background: transparent; border: none; cursor: pointer; text-align: left; font: inherit; color: var(--text); }
+  .tlhead:hover { background: #131a22; }
+  .tltime { font-family: ui-monospace, Menlo, Consolas, monospace; font-weight: 700; color: var(--lime); width: 54px; flex: none; }
+  .tlbody { flex: 1; } .tlphase { font-weight: 700; font-size: 13px; color: var(--text); }
+  .tlchev { margin-left: auto; color: var(--muted); transition: transform .15s ease; flex: none; }
   .tlhead[aria-expanded="true"] .tlchev { transform: rotate(180deg); }
-  .tldetailwrap { padding: 0 12px 11px 76px; }
+  .tldetailwrap { padding: 0 14px 12px 80px; }
   .tldetailwrap[hidden] { display: none; }
-  .tltitle2 { font-weight: 600; font-size: 12.5px; color: var(--navy); margin-bottom: 2px; }
-  .tldetail { font-size: 12.5px; color: var(--text); margin-top: 2px; }
-  .nightbox { padding: 10px 12px; border-top: 1px solid var(--line); background: #1f2c3d0a; }
-  .nightbox ul { margin: 6px 0 0; padding-left: 18px; font-size: 12.5px; }
-  .calbox { padding: 10px 12px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 6px; }
-  .gcal { font-size: 12.5px; color: var(--blue); text-decoration: none; }
+  .tltitle2 { font-weight: 600; font-size: 12.5px; color: var(--text); margin-bottom: 2px; }
+  .tldetail { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+  .nightbox { padding: 11px 14px; border-top: 1px solid var(--line); background: #0f151c; }
+  .nightbox ul { margin: 6px 0 0; padding-left: 18px; font-size: 12.5px; color: #cdd8e3; }
+  .calbox { padding: 12px 14px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; }
+  .gcal { font-size: 12.5px; color: var(--lime); text-decoration: none; }
   .gcal:hover { text-decoration: underline; }
+  .calbox .ghost { align-self: flex-start; }
 </style>
 </head>
 <body>
 <header>
-  <div class="wrap" style="padding-top:0;padding-bottom:0;">
-    <h1>Athlete Performance Platform</h1>
-    <p>Create an athlete profile and build a match-day plan</p>
+  <div class="wrap" style="padding-top:14px;padding-bottom:14px;">
+    <div class="brand">
+      <div class="mark">A</div>
+      <div>
+        <h1>Athlete Performance Platform</h1>
+        <p>Game-day fuel &amp; recovery, built around you</p>
+      </div>
+    </div>
   </div>
 </header>
 
 <div class="wrap">
 
+  <div class="hero">
+    <h2>Fuel your <span class="hl">game day.</span></h2>
+    <p>Set up your profile and get a personalized plan for what to eat, when to eat it, and how to recover — built around your body, your sport, and your schedule.</p>
+  </div>
+
   <div class="card">
-    <h2>New athlete profile</h2>
-    <p class="sub">Pick the sport first — it sets the player's unique ID and the positions available. Required fields are marked *.</p>
+    <h2>Create your player profile</h2>
+    <p class="sub">Start with your sport — it sets your Player ID and the positions you can pick. Fields marked * are required.</p>
+
+    <div class="photopick">
+      <div class="avatarbig" id="avatarPreview">Add<br>photo</div>
+      <div>
+        <input type="file" id="photoInput" accept="image/*" style="display:none" onchange="handlePhoto(this)" />
+        <button type="button" class="ghost" onclick="document.getElementById('photoInput').click()">Upload photo</button>
+        <div class="hint">Optional. A clear, front-on headshot looks best — it gets cropped to a circle.</div>
+      </div>
+    </div>
 
     <label>Full name *</label>
     <input id="fullName" placeholder="Sam Player" />
@@ -189,14 +261,14 @@
     </div>
 
     <div class="actions">
-      <button class="primary" onclick="createProfile()">Save profile</button>
+      <button class="primary" onclick="createProfile()">Create my profile</button>
     </div>
     <div id="profileOut" class="out"></div>
   </div>
 
   <div class="card">
-    <h2>Saved players</h2>
-    <p class="sub">Every athlete you create on this device.</p>
+    <h2>Your players</h2>
+    <p class="sub">Everyone you have added on this device. Tap a player to build their game-day plan.</p>
     <div class="actions" style="margin-top:0;">
       <button class="ghost" onclick="loadProfiles()">Load players</button>
     </div>
@@ -315,7 +387,7 @@
     const sport = $("sport").value;
     const payload = {
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
-      identity: { fullName: $("fullName").value.trim(), dateOfBirth: $("dob").value || undefined, sex: $("sex").value },
+      identity: { fullName: $("fullName").value.trim(), dateOfBirth: $("dob").value || undefined, sex: $("sex").value, avatarUrl: pendingAvatar || undefined },
       sport: { primarySport: sport, positions: [$("position").value], competitionLevel: $("level").value },
       anthropometrics: { heightCm: Math.round((Number($("heightFt").value) * 12 + Number($("heightIn").value)) * 2.54), bodyMassKg: Math.round(Number($("weight").value) * 0.453592 * 10) / 10 },
       contact: buildContact(),
@@ -333,6 +405,8 @@
         rememberId(data.ownerId);
         show("profileOut", true, "Saved! Athlete ID " + data.ownerId + "\nName: " + data.identity.fullName);
         $("fullName").value = "";
+        pendingAvatar = null;
+        { const pv = $("avatarPreview"); if (pv) pv.innerHTML = "Add<br>photo"; }
         ["athEmail","athPhone","parEmail","parPhone","emName","emPhone"].forEach((id) => ($(id).value = ""));
         newAthleteId(); // ready for the next, different player
         loadProfiles();
@@ -350,7 +424,7 @@
   async function loadProfiles() {
     const list = $("list");
     const ids = getStoredIds();
-    if (!ids.length) { list.innerHTML = '<p class="muted">No players yet. Save one above.</p>'; return; }
+    if (!ids.length) { list.innerHTML = '<p class="muted">No players yet — add one above to get started.</p>'; return; }
     list.innerHTML = '<p class="muted">Loading…</p>';
     const all = [];
     for (const oid of ids) {
@@ -362,13 +436,18 @@
     if (!all.length) { list.innerHTML = '<p class="muted">No saved players found.</p>'; return; }
     list.innerHTML = all.map((p) => `
       <div class="profile">
-        <div class="pname">${escapeHtml(p.identity?.fullName || "Unnamed")}</div>
+        <div class="phead">
+          <div class="avatar">${p.identity?.avatarUrl ? '<img src="'+p.identity.avatarUrl+'" alt="">' : escapeHtml(initials(p.identity?.fullName))}</div>
+          <div class="pinfo">
+            <div class="pname">${escapeHtml(p.identity?.fullName || "Unnamed")}</div>
         <div class="pmeta">${escapeHtml(SPORTS[p.sport?.primarySport]?.label || p.sport?.primarySport || "")}
           · ${escapeHtml((p.sport?.positions || []).join(", "))}
           · ${p.anthropometrics?.heightCm}cm / ${p.anthropometrics?.bodyMassKg}kg</div>
-        <div class="pid">${escapeHtml(p.ownerId)}</div>
-        <div class="actions" style="margin-top:10px;">
-          <button class="primary" onclick="viewPlan('${p.id}','${escapeHtml(p.ownerId)}')">Today's match-day plan</button>
+            <div class="pid">${escapeHtml(p.ownerId)}</div>
+          </div>
+        </div>
+        <div class="actions" style="margin-top:14px;">
+          <button class="primary" onclick="viewPlan('${p.id}','${escapeHtml(p.ownerId)}')">Today's game-day plan</button>
           <button class="ghost" onclick="toggleEventForm('${p.id}','${escapeHtml(p.ownerId)}')">+ Create event</button>
           <button class="ghost" onclick="loadEvents('${p.id}','${escapeHtml(p.ownerId)}')">Fixtures</button>
         </div>
@@ -566,6 +645,33 @@
     const blob = new Blob([lines.join("\r\n")], { type: "text/calendar" });
     const url = URL.createObjectURL(blob); const a = document.createElement("a");
     a.href = url; a.download = "gameday-" + t.date + ".ics"; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+  }
+
+  // ---- Profile photo (resized to a small square, stored on the profile) --
+  let pendingAvatar = null;
+  function initials(name) {
+    const p = (name || "").trim().split(/\s+/);
+    return (((p[0] || "")[0] || "") + ((p[1] || "")[0] || "")).toUpperCase() || "?";
+  }
+  function handlePhoto(input) {
+    const file = input.files && input.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const size = 320, c = document.createElement("canvas");
+        c.width = size; c.height = size;
+        const ctx = c.getContext("2d");
+        const s = Math.min(img.width, img.height);
+        ctx.drawImage(img, (img.width - s) / 2, (img.height - s) / 2, s, s, 0, 0, size, size);
+        pendingAvatar = c.toDataURL("image/jpeg", 0.82);
+        const pv = document.getElementById("avatarPreview");
+        if (pv) pv.innerHTML = '<img src="' + pendingAvatar + '" alt="">';
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
   }
 
   function escapeHtml(s) { return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }

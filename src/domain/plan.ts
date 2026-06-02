@@ -230,3 +230,17 @@ export function buildMatchDayPlan(profile: AthleteProfile, opts: PlanOptions): M
       "Starting targets from published sports-nutrition guidance; not a substitute for individualized professional advice.",
   };
 }
+
+/** Body-mass-aware safe food suggestions for a profile (reused by the timeline). */
+export function safeFoodSuggestions(
+  profile: AthleteProfile,
+  kind: "carb" | "protein",
+): string[] {
+  const n = profile.nutrition;
+  return safeFoods(
+    kind,
+    (n.allergies || []).map((a) => a.allergen),
+    n.dietaryRestrictions || [],
+    n.intolerances || [],
+  );
+}

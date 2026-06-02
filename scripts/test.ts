@@ -22,6 +22,7 @@ import { CheckInService } from "../src/services/checkinService.js";
 import type { ProfileInput } from "../src/domain/profile.js";
 import type { CheckInInput } from "../src/domain/checkin.js";
 import { buildMatchDayPlan } from "../src/domain/plan.js";
+import { buildGameDayTimeline } from "../src/domain/timeline.js";
 import type { AthleteProfile } from "../src/domain/profile.js";
 
 let passed = 0;
@@ -225,6 +226,22 @@ async function main(): Promise<void> {
     check("vegan plan still offers a protein (tofu/lentils)", vFoods.includes("tofu") || vFoods.includes("lentils"));
   } else {
     check("plan profile created", false);
+  }
+
+  console.log("\nGame-day timeline");
+  if (fp) {
+    const tl = buildGameDayTimeline(fp, { date: "2026-06-02", kickoff: "19:00", wakeTime: "07:00", bedTime: "22:30", playsTomorrow: true });
+    check("timeline starts at wake-up", tl.entries[0].time === "07:00" && tl.entries[0].phase === "Wake-up");
+    check("kickoff entry present at 19:00", tl.entries.some((e) => e.time === "19:00" && e.phase === "Kickoff"));
+    check("pre-game meal is 3.5h before (15:30)", tl.entries.some((e) => e.time === "15:30" && e.phase === "Pre-game meal"));
+    check("immediate recovery scaled (75kg -> 90g)", tl.entries.some((e) => e.phase === "Immediate recovery" && e.detail.includes("90 g")));
+    check("ends at bedtime", tl.entries[tl.entries.length - 1].time === "22:30");
+    check("night routine flags game tomorrow", tl.nextDay.playsTomorrow === true && /tomorrow/i.test(tl.nightRoutine.title));
+    check("calendar events generated", tl.calendar.length >= 1 && tl.calendar[0].start === "2026-06-02T19:00");
+    const noTomorrow = buildGameDayTimeline(fp, { date: "2026-06-02", kickoff: "19:00", playsTomorrow: false });
+    check("no-game-tomorrow night routine differs", noTomorrow.nextDay.playsTomorrow === false);
+  } else {
+    check("timeline profile available", false);
   }
 
   db.close();

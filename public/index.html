@@ -64,9 +64,25 @@
   .evtype.match { background: var(--blue); } .evtype.training { background: var(--green); } .evtype.recovery { background: #8a5a00; } .evtype.travel { background: #6b5bd6; }
   .evwhen { font-size: 13px; color: var(--text); }
   .evbtn { padding: 6px 10px; font-size: 12.5px; }
-  .tlwrap { } .tlrow { display: flex; gap: 12px; padding: 9px 12px; border-top: 1px solid var(--line); }
+  .daybefore { margin: 4px 12px 0; border: 1px solid var(--line); border-radius: 8px; background: #6b5bd60a; overflow: hidden; }
+  .dbhead { font-weight: 700; font-size: 12.5px; color: var(--navy); padding: 9px 12px; background: #6b5bd615; border-bottom: 1px solid var(--line); }
+  .dbrow { display: flex; gap: 12px; padding: 9px 12px; border-top: 1px solid var(--line); }
+  .dbrow:first-of-type { border-top: none; }
+  .dbwhen { font-size: 11px; text-transform: uppercase; letter-spacing: .4px; font-weight: 700; color: #6b5bd6; width: 116px; flex: none; padding-top: 1px; }
+  .dbbody { flex: 1; }
+  .tlgdhead { font-weight: 700; font-size: 12.5px; color: var(--navy); padding: 12px 12px 6px; }
+  .tlwrap { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; margin: 0 12px; }
+  .tlrow { border-top: 1px solid var(--line); }
+  .tlrow:first-child { border-top: none; }
+  .tlhead { width: 100%; display: flex; align-items: center; gap: 12px; padding: 10px 12px; background: #fff; border: none; cursor: pointer; text-align: left; font: inherit; }
+  .tlhead:hover { background: var(--grey); }
   .tltime { font-family: ui-monospace, Menlo, Consolas, monospace; font-weight: 700; color: var(--navy); width: 52px; flex: none; }
   .tlbody { flex: 1; } .tlphase { font-weight: 700; font-size: 13px; color: var(--navy); }
+  .tlchev { margin-left: auto; color: #8794a1; transition: transform .15s ease; flex: none; }
+  .tlhead[aria-expanded="true"] .tlchev { transform: rotate(180deg); }
+  .tldetailwrap { padding: 0 12px 11px 76px; }
+  .tldetailwrap[hidden] { display: none; }
+  .tltitle2 { font-weight: 600; font-size: 12.5px; color: var(--navy); margin-bottom: 2px; }
   .tldetail { font-size: 12.5px; color: var(--text); margin-top: 2px; }
   .nightbox { padding: 10px 12px; border-top: 1px solid var(--line); background: #1f2c3d0a; }
   .nightbox ul { margin: 6px 0 0; padding-left: 18px; font-size: 12.5px; }
@@ -79,7 +95,7 @@
 <header>
   <div class="wrap" style="padding-top:0;padding-bottom:0;">
     <h1>Athlete Performance Platform</h1>
-    <p>Create an athlete profile and log a daily check-in</p>
+    <p>Create an athlete profile and build a match-day plan</p>
   </div>
 </header>
 
@@ -353,37 +369,14 @@
         <div class="pid">${escapeHtml(p.ownerId)}</div>
         <div class="actions" style="margin-top:10px;">
           <button class="primary" onclick="viewPlan('${p.id}','${escapeHtml(p.ownerId)}')">Today's match-day plan</button>
-          <button class="ghost" onclick="quickCheckin('${p.id}','${escapeHtml(p.ownerId)}')">Log check-in</button>
           <button class="ghost" onclick="toggleEventForm('${p.id}','${escapeHtml(p.ownerId)}')">+ Create event</button>
           <button class="ghost" onclick="loadEvents('${p.id}','${escapeHtml(p.ownerId)}')">Fixtures</button>
         </div>
-        <div class="out" id="ci-${p.id}"></div>
         <div id="evform-${p.id}"></div>
         <div id="evlist-${p.id}"></div>
         <div id="plan-${p.id}"></div>
         <div id="timeline-${p.id}"></div>
       </div>`).join("");
-  }
-
-  async function quickCheckin(profileId, oid) {
-    const energy = Number(prompt("Energy today (1-10)?", "8"));
-    if (!energy) return;
-    const soreness = Number(prompt("Soreness today (1-10)?", "3")) || undefined;
-    const sleep = Number(prompt("Hours slept last night?", "7.5")) || undefined;
-    const today = new Date().toISOString().slice(0, 10);
-    const body = { date: today, energyLevel: energy, sorenessLevel: soreness, sleepHoursLastNight: sleep };
-    const out = $("ci-" + profileId);
-    try {
-      const res = await apiAs(oid, "/api/profiles/" + profileId + "/checkins", { method: "POST", body: JSON.stringify(body) });
-      const data = await res.json();
-      out.className = "out " + (res.status === 201 ? "ok" : "err");
-      out.textContent = res.status === 201
-        ? "Check-in saved for " + data.date + " (energy " + data.energyLevel + ")."
-        : "Error: " + (data.error || JSON.stringify(data.details || data));
-    } catch (e) {
-      out.className = "out err";
-      out.textContent = "Network error: " + e.message;
-    }
   }
 
   async function viewPlan(profileId, oid) {
@@ -499,13 +492,52 @@
     } catch (e) { el.innerHTML = '<div class="out err" style="display:block">' + escapeHtml(e.message) + '</div>'; }
   }
 
+  function foodsHtml(foods) {
+    return (foods && foods.length) ? '<div class="planfoods">Foods: ' + foods.map(escapeHtml).join(", ") + '</div>' : '';
+  }
+
+  function toggleTl(btn) {
+    const open = btn.getAttribute("aria-expanded") === "true";
+    btn.setAttribute("aria-expanded", open ? "false" : "true");
+    const body = btn.nextElementSibling;
+    if (body) body.hidden = open;
+  }
+
   function renderTimeline(t, pid) {
     const warns = (t.safety.warnings || []).map((w) => '<div class="planwarn">⚠ ' + escapeHtml(w) + '</div>').join("");
-    const rows = t.entries.map((e) => `<div class="tlrow"><div class="tltime">${escapeHtml(e.time)}</div><div class="tlbody"><div class="tlphase">${escapeHtml(e.phase)} — ${escapeHtml(e.title)}</div><div class="tldetail">${escapeHtml(e.detail)}</div>${(e.foods && e.foods.length) ? '<div class="planfoods">Foods: ' + e.foods.map(escapeHtml).join(", ") + '</div>' : ''}</div></div>`).join("");
+
+    // Day before — separated section (evening & night prep).
+    let dayBefore = "";
+    if (t.dayBefore) {
+      const db = t.dayBefore;
+      const dbRows = (db.items || []).map((it) =>
+        '<div class="dbrow"><div class="dbwhen">' + escapeHtml(it.when) + '</div>' +
+        '<div class="dbbody"><div class="tlphase">' + escapeHtml(it.title) + '</div>' +
+        '<div class="tldetail">' + escapeHtml(it.detail) + '</div>' + foodsHtml(it.foods) + '</div></div>'
+      ).join("");
+      dayBefore = '<div class="daybefore"><div class="dbhead">' + escapeHtml(db.title) + ' · ' + escapeHtml(db.date) +
+        '</div>' + dbRows + '</div>';
+    }
+
+    // Game day — collapsed rows you drop down (15-min increments).
+    const rows = t.entries.map((e) =>
+      '<div class="tlrow">' +
+        '<button type="button" class="tlhead" aria-expanded="false" onclick="toggleTl(this)">' +
+          '<span class="tltime">' + escapeHtml(e.time) + '</span>' +
+          '<span class="tlphase">' + escapeHtml(e.phase) + '</span>' +
+          '<span class="tlchev">▾</span>' +
+        '</button>' +
+        '<div class="tldetailwrap" hidden>' +
+          '<div class="tltitle2">' + escapeHtml(e.title) + '</div>' +
+          '<div class="tldetail">' + escapeHtml(e.detail) + '</div>' + foodsHtml(e.foods) +
+        '</div>' +
+      '</div>'
+    ).join("");
+
     const night = '<div class="nightbox"><div class="tlphase">' + escapeHtml(t.nightRoutine.title) + '</div><ul>' + t.nightRoutine.items.map((i) => '<li>' + escapeHtml(i) + '</li>').join("") + '</ul></div>';
     const gcal = (t.calendar || []).map((ev) => '<a class="gcal" target="_blank" rel="noopener" href="' + gcalLink(ev) + '">+ Add “' + escapeHtml(ev.title) + '” to Google Calendar</a>').join("");
     const ics = '<button class="ghost" onclick="downloadIcs(\'' + pid + '\')">Download .ics (Apple / Outlook)</button>';
-    return '<div class="plan"><div class="plansummary">Game-day timeline — ' + escapeHtml(t.date) + ' · kickoff ' + escapeHtml(t.kickoff) + (t.playsTomorrow ? ' · plays again tomorrow' : '') + '</div>' + warns + '<div class="tlwrap">' + rows + '</div>' + night + '<div class="calbox">' + gcal + '<div>' + ics + '</div></div><div class="plandisc">' + escapeHtml(t.disclaimer) + '</div></div>';
+    return '<div class="plan"><div class="plansummary">Game-day timeline — ' + escapeHtml(t.date) + ' · kickoff ' + escapeHtml(t.kickoff) + (t.playsTomorrow ? ' · plays again tomorrow' : '') + '</div>' + warns + dayBefore + '<div class="tlgdhead">Game day · tap any time to see the plan</div><div class="tlwrap">' + rows + '</div>' + night + '<div class="calbox">' + gcal + '<div>' + ics + '</div></div><div class="plandisc">' + escapeHtml(t.disclaimer) + '</div></div>';
   }
 
   function addMinutesIso(dateStr, min) {

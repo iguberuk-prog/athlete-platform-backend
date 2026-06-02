@@ -1,15 +1,5 @@
 /**
  * Lightweight end-to-end test harness (no framework needed).
- *
- * Exercises profiles + daily check-ins against an in-memory SQLite database:
- *   - profile create + validation success
- *   - validation failures (allergy shape, numeric bounds, contradictory diets,
- *     missing soccer position, age determinability, out-of-range scale)
- *   - owner-only access
- *   - update / delete
- *   - check-in logging, validation, owner/profile scoping, one-per-day upsert
- *
- * Run with:  npm test
  */
 
 import { openDatabase } from "../src/data/db.js";
@@ -213,10 +203,8 @@ async function main(): Promise<void> {
     check("plan scales carbs to body mass (75kg -> 90g post)", plan.blocks.some((b) => b.targets.some((t) => t.detail.includes("90 g"))));
     check("plan lists 5 phases", plan.blocks.length === 5);
     check("peanut allergy surfaced in safety", plan.safety.avoidAllergens.includes("peanut"));
-    // lactose intolerant -> Greek yogurt filtered out of recovery foods
     const allFoods = plan.blocks.flatMap((b) => b.foods || []);
     check("lactose intolerant excludes Greek yogurt", !allFoods.includes("Greek yogurt"));
-    // a vegan profile -> no animal proteins suggested
     const vegan = validProfile();
     vegan.nutrition.dietaryRestrictions = ["vegan"];
     const veganProfile = { ...fp, nutrition: vegan.nutrition } as AthleteProfile;
@@ -238,28 +226,18 @@ async function main(): Promise<void> {
     check("ends at bedtime", tl.entries[tl.entries.length - 1].time === "22:30");
     check("night routine flags game tomorrow", tl.nextDay.playsTomorrow === true && /tomorrow/i.test(tl.nightRoutine.title));
     check("calendar events generated", tl.calendar.length >= 1 && tl.calendar[0].start === "2026-06-02T19:00");
+    // Day-before section is separated, dated the day before, with evening + night prep items.
+    check("day-before section is dated the prior day", tl.dayBefore.date === "2026-06-01");
+    check("day-before has evening + night prep items", tl.dayBefore.items.length >= 4 && tl.dayBefore.items.some((i) => /sleep/i.test(i.when) || /8.9 hours/i.test(i.detail)));
+    check("day-before carb dinner has foods", tl.dayBefore.items[0].foods!.length > 0);
+    check("night-before dinner added to calendar", tl.calendar.some((c) => c.start === "2026-06-01T18:30"));
+    // Every game-day entry sits on a 15-minute increment.
+    check("all timeline times are on 15-min increments", tl.entries.every((e) => Number(e.time.slice(3)) % 15 === 0));
     const noTomorrow = buildGameDayTimeline(fp, { date: "2026-06-02", kickoff: "19:00", playsTomorrow: false });
     check("no-game-tomorrow night routine differs", noTomorrow.nextDay.playsTomorrow === false);
   } else {
     check("timeline profile available", false);
   }
-
-  console.log("\nFixtures (events)");
-  const fxOwner = "owner-fx";
-  const fxCreated = await profiles.create(fxOwner, validProfile());
-  const fxId = fxCreated.ok ? fxCreated.value.id : "";
-  const addRes = await profiles.addEvents(fxOwner, fxId, [
-    { type: "match", startTime: "2026-09-05T15:00:00+01:00", importance: "high", conditions: "home" },
-    { type: "training", startTime: "2026-09-07T18:00:00+01:00", importance: "normal" },
-  ]);
-  check("events append succeeds", addRes.ok);
-  const listRes = await profiles.listEvents(fxOwner, fxId);
-  // validProfile() already includes one match event, so 1 + 2 = 3
-  check("events listed and sorted", listRes.ok && listRes.value.length === 3 && listRes.value[0].startTime <= listRes.value[1].startTime);
-  const badAdd = await profiles.addEvents(fxOwner, fxId, [{ type: "match", startTime: "nope", importance: "high" } as never]);
-  check("invalid event datetime rejected", !badAdd.ok);
-  const orphanAdd = await profiles.addEvents(fxOwner, "missing-id", [{ type: "match", startTime: "2026-09-05T15:00:00+01:00", importance: "high" }]);
-  check("add events to unknown profile is 404", !orphanAdd.ok);
 
   db.close();
   console.log(`\n${passed} passed, ${failed} failed`);

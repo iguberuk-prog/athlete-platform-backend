@@ -10,6 +10,7 @@
  */
 
 import type { Config, Context } from "@netlify/functions";
+import { verifyUser } from "../../src/auth.js";
 import { getCheckInService } from "../../src/container.js";
 import type { CheckInInput } from "../../src/domain/checkin.js";
 
@@ -20,16 +21,12 @@ function json(body: unknown, status = 200): Response {
   });
 }
 
-function getOwnerId(req: Request): string | null {
-  const id = req.headers.get("x-owner-id");
-  return id && id.trim() ? id.trim() : null;
-}
 
 export default async (req: Request, context: Context): Promise<Response> => {
-  const ownerId = getOwnerId(req);
+  const ownerId = (await verifyUser(req))?.id ?? null;
   if (!ownerId) {
     return json(
-      { error: "missing x-owner-id header (stands in for authentication)" },
+      { error: "unauthorized", message: "Please sign in." },
       401,
     );
   }

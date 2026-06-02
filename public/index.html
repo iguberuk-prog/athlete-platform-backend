@@ -162,6 +162,8 @@
   .calevent:hover { filter: brightness(1.06); }
   .caldetail { margin: 10px 14px 0; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--r2); background: #0f151c; font-size: 12.5px; color: var(--muted); }
   .cdtime { font-weight: 800; color: var(--lime); font-size: 12px; margin-bottom: 4px; font-family: ui-monospace, Menlo, Consolas, monospace; }
+  .signedbar { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; color:var(--muted); font-size:13px; margin-bottom:14px; }
+  .signedbar b { color:var(--text); }
 </style>
 </head>
 <body>
@@ -184,6 +186,22 @@
     <p>Set up your profile and get a personalized plan for what to eat, when to eat it, and how to recover — built around your body, your sport, and your schedule.</p>
   </div>
 
+  <div class="card" id="authCard">
+    <h2 id="authTitle">Log in</h2>
+    <p class="sub" id="authSub">Log in to see your profile and game-day plan. New here? Create an account — it takes a few seconds.</p>
+    <label>Email</label>
+    <input id="authEmail" type="email" placeholder="you@example.com" autocomplete="email" />
+    <label>Password</label>
+    <input id="authPass" type="password" placeholder="At least 6 characters" autocomplete="current-password" onkeydown="if(event.key==='Enter')doAuth()" />
+    <div class="actions">
+      <button class="primary" id="authBtn" onclick="doAuth()">Log in</button>
+      <button class="ghost" id="authToggle" onclick="toggleAuthMode()">New here? Create an account</button>
+    </div>
+    <div id="authOut" class="out"></div>
+  </div>
+
+<div id="app" style="display:none">
+  <div class="signedbar" id="signedbar"></div>
   <div class="card">
     <h2>Create your player profile</h2>
     <p class="sub">Start with your sport — it sets your Player ID and the positions you can pick. Fields marked * are required.</p>
@@ -211,7 +229,7 @@
       </div>
     </div>
 
-    <label>Athlete ID (unique, auto-generated)</label>
+    <label>Player ID (auto-generated)</label>
     <input id="ownerId" readonly />
     <div class="hint">Every player gets their own unique ID, starting with the sport code (e.g. SOC-K7F2Q). A new one is generated automatically for each athlete.</div>
 
@@ -288,15 +306,17 @@
 
   <div class="card">
     <h2>Your players</h2>
-    <p class="sub">Everyone you have added on this device. Tap a player to build their game-day plan.</p>
+    <p class="sub">Your profile and game-day plan. Tap your card to build today's plan.</p>
     <div class="actions" style="margin-top:0;">
-      <button class="ghost" onclick="loadProfiles()">Load players</button>
+      <button class="ghost" onclick="loadProfiles()">Refresh</button>
     </div>
     <div id="list"></div>
   </div>
+</div>
 
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
   // Sport config: code = Athlete ID prefix; positions = [value, label] for that sport.
   const SPORTS = {
@@ -338,6 +358,7 @@
   };
 
   const $ = (id) => document.getElementById(id);
+  let sb = null, authMode = "login";
   const checked = (containerId) =>
     [...document.querySelectorAll(`#${containerId} input:checked`)].map((c) => c.value);
 
@@ -353,17 +374,6 @@
     $("ownerId").value = code + "-" + randomCode();
   }
   const ownerId = () => $("ownerId").value.trim();
-
-  // ---- Remember created players on this device --------------------------
-  function getStoredIds() {
-    try { return JSON.parse(localStorage.getItem("athleteIds") || "[]"); } catch { return []; }
-  }
-  function rememberId(id) {
-    try {
-      const ids = getStoredIds();
-      if (!ids.includes(id)) { ids.push(id); localStorage.setItem("athleteIds", JSON.stringify(ids)); }
-    } catch {}
-  }
 
   function initSports() {
     $("sport").innerHTML = Object.entries(SPORTS)
@@ -383,11 +393,14 @@
     el.textContent = msg;
   }
 
-  async function apiAs(oid, path, opts = {}) {
-    return fetch(path, {
-      ...opts,
-      headers: { "content-type": "application/json", "x-owner-id": oid, ...(opts.headers || {}) },
-    });
+  async function api(path, opts = {}) {
+    const headers = { "content-type": "application/json", ...(opts.headers || {}) };
+    try {
+      const r = sb && (await sb.auth.getSession());
+      const token = r && r.data && r.data.session && r.data.session.access_token;
+      if (token) headers["authorization"] = "Bearer " + token;
+    } catch {}
+    return fetch(path, { ...opts, headers });
   }
 
   // Collect contact info; omit empty fields so we only send what was entered.
@@ -403,11 +416,10 @@
   }
 
   async function createProfile() {
-    const oid = ownerId();
     const sport = $("sport").value;
     const payload = {
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
-      identity: { fullName: $("fullName").value.trim(), dateOfBirth: $("dob").value || undefined, sex: $("sex").value, avatarUrl: pendingAvatar || undefined },
+      identity: { fullName: $("fullName").value.trim(), dateOfBirth: $("dob").value || undefined, sex: $("sex").value, avatarUrl: pendingAvatar || undefined, playerCode: ($("ownerId").value || "").trim() || undefined },
       sport: { primarySport: sport, positions: [$("position").value], competitionLevel: $("level").value },
       anthropometrics: { heightCm: Math.round((Number($("heightFt").value) * 12 + Number($("heightIn").value)) * 2.54), bodyMassKg: Math.round(Number($("weight").value) * 0.453592 * 10) / 10 },
       contact: buildContact(),
@@ -419,11 +431,10 @@
       },
     };
     try {
-      const res = await apiAs(oid, "/api/profiles", { method: "POST", body: JSON.stringify(payload) });
+      const res = await api("/api/profiles", { method: "POST", body: JSON.stringify(payload) });
       const data = await res.json();
       if (res.status === 201) {
-        rememberId(data.ownerId);
-        show("profileOut", true, "Saved! Athlete ID " + data.ownerId + "\nName: " + data.identity.fullName);
+        show("profileOut", true, "You're all set! Player ID " + (data.identity?.playerCode || "—") + "\nName: " + data.identity.fullName);
         $("fullName").value = "";
         pendingAvatar = null;
         { const pv = $("avatarPreview"); if (pv) pv.innerHTML = "Add<br>photo"; }
@@ -443,18 +454,14 @@
 
   async function loadProfiles() {
     const list = $("list");
-    const ids = getStoredIds();
-    if (!ids.length) { list.innerHTML = '<p class="muted">No players yet — add one above to get started.</p>'; return; }
     list.innerHTML = '<p class="muted">Loading…</p>';
-    const all = [];
-    for (const oid of ids) {
-      try {
-        const res = await apiAs(oid, "/api/profiles");
-        if (res.ok) { const d = await res.json(); (d.profiles || []).forEach((p) => all.push(p)); }
-      } catch {}
-    }
-    if (!all.length) { list.innerHTML = '<p class="muted">No saved players found.</p>'; return; }
-    list.innerHTML = all.map((p) => `
+    try {
+      const res = await api("/api/profiles");
+      if (res.status === 401) { list.innerHTML = '<p class="muted">Please log in to see your profile.</p>'; return; }
+      const d = await res.json();
+      const all = d.profiles || [];
+      if (!all.length) { list.innerHTML = '<p class="muted">No profile yet — fill in the form above to create yours.</p>'; return; }
+      list.innerHTML = all.map((p) => `
       <div class="profile">
         <div class="phead">
           <div class="avatar">${p.identity?.avatarUrl ? '<img src="'+p.identity.avatarUrl+'" alt="">' : escapeHtml(initials(p.identity?.fullName))}</div>
@@ -463,26 +470,27 @@
         <div class="pmeta">${escapeHtml(SPORTS[p.sport?.primarySport]?.label || p.sport?.primarySport || "")}
           · ${escapeHtml((p.sport?.positions || []).join(", "))}
           · ${p.anthropometrics?.heightCm}cm / ${p.anthropometrics?.bodyMassKg}kg</div>
-            <div class="pid">${escapeHtml(p.ownerId)}</div>
+            <div class="pid">${escapeHtml(p.identity?.playerCode || p.ownerId)}</div>
           </div>
         </div>
         <div class="actions" style="margin-top:14px;">
-          <button class="primary" onclick="viewPlan('${p.id}','${escapeHtml(p.ownerId)}')">Today's game-day plan</button>
-          <button class="ghost" onclick="toggleEventForm('${p.id}','${escapeHtml(p.ownerId)}')">+ Create event</button>
-          <button class="ghost" onclick="loadEvents('${p.id}','${escapeHtml(p.ownerId)}')">Fixtures</button>
+          <button class="primary" onclick="viewPlan('${p.id}')">Today's game-day plan</button>
+          <button class="ghost" onclick="toggleEventForm('${p.id}')">+ Create event</button>
+          <button class="ghost" onclick="loadEvents('${p.id}')">Fixtures</button>
         </div>
         <div id="evform-${p.id}"></div>
         <div id="evlist-${p.id}"></div>
         <div id="plan-${p.id}"></div>
         <div id="timeline-${p.id}"></div>
       </div>`).join("");
+    } catch (e) { list.innerHTML = '<p class="muted">Could not load: ' + escapeHtml(e.message) + '</p>'; }
   }
 
-  async function viewPlan(profileId, oid) {
+  async function viewPlan(profileId) {
     const el = $("plan-" + profileId);
     el.innerHTML = '<p class="muted">Building plan…</p>';
     try {
-      const res = await apiAs(oid, "/api/profiles/" + profileId + "/plan");
+      const res = await api("/api/profiles/" + profileId + "/plan");
       const data = await res.json();
       if (!res.ok) { el.innerHTML = '<div class="out err" style="display:block">' + escapeHtml(data.error || "error") + '</div>'; return; }
       el.innerHTML = renderPlan(data);
@@ -518,7 +526,7 @@
     el.className = "out " + (ok ? "ok" : "err"); el.textContent = msg;
   }
 
-  function toggleEventForm(pid, oid) {
+  function toggleEventForm(pid) {
     const el = $("evform-" + pid);
     if (el.innerHTML) { el.innerHTML = ""; return; }
     const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -537,12 +545,12 @@
           <div class="chips">${days.map((d, i) => `<label class="chip"><input type="checkbox" value="${(i + 1) % 7}" class="evwd-${pid}"> ${d}</label>`).join("")}</div>
           <label>Until</label><input id="evuntil-${pid}" type="date" />
         </div>
-        <div class="actions"><button class="primary" onclick="saveEvent('${pid}','${oid}')">Save event</button></div>
+        <div class="actions"><button class="primary" onclick="saveEvent('${pid}')">Save event</button></div>
         <div class="out" id="evout-${pid}"></div>
       </div>`;
   }
 
-  async function saveEvent(pid, oid) {
+  async function saveEvent(pid) {
     const type = $("evtype-" + pid).value;
     const date = $("evdate-" + pid).value;
     const time = $("evtime-" + pid).value || "19:00";
@@ -559,31 +567,31 @@
       if (!events.length) { showEv(pid, false, "No matching days in that range."); return; }
     } else { events = [mk(date)]; }
     try {
-      const res = await apiAs(oid, "/api/profiles/" + pid + "/events", { method: "POST", body: JSON.stringify({ events }) });
+      const res = await api("/api/profiles/" + pid + "/events", { method: "POST", body: JSON.stringify({ events }) });
       const d = await res.json();
-      if (res.status === 201) { showEv(pid, true, events.length + " event(s) saved."); setTimeout(() => { $("evform-" + pid).innerHTML = ""; }, 800); loadEvents(pid, oid); }
+      if (res.status === 201) { showEv(pid, true, events.length + " event(s) saved."); setTimeout(() => { $("evform-" + pid).innerHTML = ""; }, 800); loadEvents(pid); }
       else showEv(pid, false, (d.error || "error") + (d.message ? ": " + d.message : "") + (d.details ? ": " + d.details.map((x) => x.path + " " + x.message).join(", ") : ""));
     } catch (e) { showEv(pid, false, "Network error: " + e.message); }
   }
 
-  async function loadEvents(pid, oid) {
+  async function loadEvents(pid) {
     const el = $("evlist-" + pid); el.innerHTML = '<p class="muted">Loading fixtures…</p>';
     try {
-      const res = await apiAs(oid, "/api/profiles/" + pid + "/events");
+      const res = await api("/api/profiles/" + pid + "/events");
       const d = await res.json(); const events = d.events || [];
       if (!events.length) { el.innerHTML = '<p class="muted">No fixtures yet. Use “Create event”.</p>'; return; }
       el.innerHTML = '<div class="evcard"><div class="evtitle">Fixtures</div>' + events.map((e) => {
         const date = e.startTime.slice(0, 10), time = e.startTime.slice(11, 16);
-        return `<div class="evrow"><span class="evtype ${e.type}">${e.type}</span><span class="evwhen">${date} · ${to12(time)}${e.conditions ? " · " + escapeHtml(e.conditions) : ""}</span>${e.type === "match" ? `<button class="ghost evbtn" onclick="viewTimeline('${pid}','${escapeHtml(oid)}','${date}','${time}')">Game-day timeline</button>` : ""}</div>`;
+        return `<div class="evrow"><span class="evtype ${e.type}">${e.type}</span><span class="evwhen">${date} · ${to12(time)}${e.conditions ? " · " + escapeHtml(e.conditions) : ""}</span>${e.type === "match" ? `<button class="ghost evbtn" onclick="viewTimeline('${pid}','${date}','${time}')">Game-day timeline</button>` : ""}</div>`;
       }).join("") + "</div>";
     } catch (e) { el.innerHTML = '<p class="muted">Could not load: ' + escapeHtml(e.message) + "</p>"; }
   }
 
-  async function viewTimeline(pid, oid, date, time) {
+  async function viewTimeline(pid, date, time) {
     const el = $("timeline-" + pid); el.innerHTML = '<p class="muted">Building game-day timeline…</p>';
     const q = "?date=" + encodeURIComponent(date) + "&kickoff=" + encodeURIComponent(time);
     try {
-      const res = await apiAs(oid, "/api/profiles/" + pid + "/timeline" + q);
+      const res = await api("/api/profiles/" + pid + "/timeline" + q);
       const t = await res.json();
       if (!res.ok) { el.innerHTML = '<div class="out err" style="display:block">' + escapeHtml(t.error || "error") + (t.message ? ": " + escapeHtml(t.message) : "") + '</div>'; return; }
       window.__tl = window.__tl || {}; window.__tl[pid] = t;
@@ -774,9 +782,63 @@
 
   function escapeHtml(s) { return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
 
+  async function initSupabase() {
+    try {
+      const res = await fetch("/api/config");
+      const cfg = await res.json();
+      if (!cfg.supabaseUrl || !cfg.supabaseAnonKey || !window.supabase) return false;
+      sb = window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey);
+      return true;
+    } catch { return false; }
+  }
+  function toggleAuthMode() {
+    authMode = authMode === "login" ? "signup" : "login";
+    $("authTitle").textContent = authMode === "login" ? "Log in" : "Create your account";
+    $("authBtn").textContent = authMode === "login" ? "Log in" : "Sign up";
+    $("authToggle").textContent = authMode === "login" ? "New here? Create an account" : "Already have an account? Log in";
+  }
+  async function doAuth() {
+    if (!sb) { show("authOut", false, "Login isn't set up yet — the site owner needs to add SUPABASE_ANON_KEY in Netlify."); return; }
+    const email = $("authEmail").value.trim(), pass = $("authPass").value;
+    if (!email || !pass) { show("authOut", false, "Enter your email and password."); return; }
+    $("authBtn").disabled = true;
+    try {
+      const resp = authMode === "signup"
+        ? await sb.auth.signUp({ email, password: pass })
+        : await sb.auth.signInWithPassword({ email, password: pass });
+      if (resp.error) { show("authOut", false, resp.error.message); $("authBtn").disabled = false; return; }
+      if (!resp.data.session) { show("authOut", true, "Almost there — check your email to confirm your account, then log in."); $("authBtn").disabled = false; return; }
+      await onSignedIn();
+    } catch (e) { show("authOut", false, "Error: " + e.message); }
+    $("authBtn").disabled = false;
+  }
+  async function logOut() { try { if (sb) await sb.auth.signOut(); } catch {} showLoggedOut(); }
+  function showLoggedOut() {
+    $("authCard").style.display = "";
+    $("app").style.display = "none";
+    $("authPass").value = "";
+  }
+  async function onSignedIn() {
+    let email = "";
+    try { const u = await sb.auth.getUser(); email = u && u.data && u.data.user ? (u.data.user.email || "") : ""; } catch {}
+    $("authCard").style.display = "none";
+    $("app").style.display = "";
+    $("signedbar").innerHTML = 'Signed in as <b>' + escapeHtml(email) + '</b><button class="ghost" style="padding:6px 12px;font-size:12.5px" onclick="logOut()">Log out</button>';
+    loadProfiles();
+  }
+  async function bootstrap() {
+    initSports();
+    const ok = await initSupabase();
+    if (!ok) { show("authOut", false, "Login isn't set up yet — the site owner needs to add SUPABASE_ANON_KEY in Netlify."); return; }
+    try {
+      const { data } = await sb.auth.getSession();
+      if (data && data.session) { await onSignedIn(); return; }
+    } catch {}
+    showLoggedOut();
+  }
+
   $("sport").addEventListener("change", onSportChange);
-  initSports();
-  loadProfiles();
+  bootstrap();
 </script>
 </body>
 </html>

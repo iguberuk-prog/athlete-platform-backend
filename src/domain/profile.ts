@@ -88,6 +88,8 @@ export interface Identity {
   fullName: string;
   /** Profile photo as a data URL (small square JPEG), stored on the profile. */
   avatarUrl?: string;
+  /** Friendly auto-generated display code, e.g. SOC-K7F2Q (not used for ownership). */
+  playerCode?: string;
   /** ISO-8601 date (YYYY-MM-DD). Source of truth for age. */
   dateOfBirth?: string;
   /** Explicit age, used only if dateOfBirth is not provided. */

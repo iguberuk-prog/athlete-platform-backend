@@ -100,4 +100,37 @@ export class ProfileService {
     );
     return { ok: true, value: events };
   }
+
+  /**
+   * Remove events from a profile's schedule. Matches on startTime (and type
+   * when given). With `series`, removes every event of that type at the same
+   * weekday and time on or after startTime (a repeating practice).
+   */
+  async removeEvents(
+    ownerId: string,
+    id: string,
+    match: { startTime: string; type?: string; series?: boolean },
+  ): Promise<ServiceResult<AthleteProfile>> {
+    const profile = await this.repo.getById(ownerId, id);
+    if (!profile) return { ok: false, code: "not_found" };
+    const events = profile.schedule?.events || [];
+    const time = match.startTime.slice(11, 16);
+    const weekday = new Date(match.startTime.slice(0, 10) + "T12:00:00Z").getUTCDay();
+    const keep = events.filter((e) => {
+      if (match.type && e.type !== match.type) return true;
+      if (!match.series) return e.startTime !== match.startTime;
+      const sameSlot =
+        e.startTime.slice(11, 16) === time &&
+        new Date(e.startTime.slice(0, 10) + "T12:00:00Z").getUTCDay() === weekday &&
+        e.startTime >= match.startTime;
+      return !sameSlot;
+    });
+    if (keep.length === events.length) return { ok: false, code: "not_found" };
+    const { id: _id, ownerId: _o, createdAt: _c, updatedAt: _u, ...input } = profile;
+    const updated = await this.repo.update(ownerId, id, {
+      ...input,
+      schedule: { ...(profile.schedule || { events: [] }), events: keep },
+    });
+    return updated ? { ok: true, value: updated } : { ok: false, code: "not_found" };
+  }
 }

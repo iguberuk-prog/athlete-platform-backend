@@ -13,9 +13,11 @@ import { randomUUID } from "node:crypto";
 import type { DB } from "./db.js";
 import type { AthleteProfile, ProfileInput } from "../domain/profile.js";
 import type { CheckInInput, DailyCheckIn } from "../domain/checkin.js";
+import type { Team, TeamMember } from "../domain/team.js";
 import type {
   AthleteProfileRepository,
   CheckInRepository,
+  TeamRepository,
 } from "./repository.js";
 
 interface ProfileRow {
@@ -123,6 +125,11 @@ export class SqliteAthleteProfileRepository implements AthleteProfileRepository 
     const info = this.db
       .prepare(`DELETE FROM athlete_profiles WHERE id = ? AND owner_id = ?`)
       .run(id, ownerId);
+    if (info.changes > 0) {
+      // Mirror the Supabase on-delete cascades.
+      this.db.prepare(`DELETE FROM daily_checkins WHERE owner_id = ? AND profile_id = ?`).run(ownerId, id);
+      this.db.prepare(`DELETE FROM team_members WHERE profile_id = ?`).run(id);
+    }
     return info.changes > 0;
   }
 }
@@ -195,5 +202,107 @@ export class SqliteCheckInRepository implements CheckInRepository {
       .prepare(`DELETE FROM daily_checkins WHERE id = ? AND owner_id = ?`)
       .run(id, ownerId);
     return info.changes > 0;
+  }
+
+  async deleteByProfile(ownerId: string, profileId: string): Promise<number> {
+    const info = this.db
+      .prepare(`DELETE FROM daily_checkins WHERE owner_id = ? AND profile_id = ?`)
+      .run(ownerId, profileId);
+    return info.changes;
+  }
+}
+
+interface TeamRow {
+  id: string;
+  code: string;
+  name: string;
+  coach_owner_id: string;
+  created_at: string;
+}
+interface MemberRow {
+  team_id: string;
+  profile_id: string;
+  owner_id: string;
+  joined_at: string;
+}
+const toTeam = (r: TeamRow): Team => ({
+  id: r.id, code: r.code, name: r.name, coachOwnerId: r.coach_owner_id, createdAt: r.created_at,
+});
+const toMember = (r: MemberRow): TeamMember => ({
+  teamId: r.team_id, profileId: r.profile_id, ownerId: r.owner_id, joinedAt: r.joined_at,
+});
+
+export class SqliteTeamRepository implements TeamRepository {
+  constructor(private readonly db: DB) {}
+
+  async create(coachOwnerId: string, name: string, code: string): Promise<Team> {
+    const team: Team = { id: randomUUID(), name, code, coachOwnerId, createdAt: new Date().toISOString() };
+    this.db
+      .prepare(`INSERT INTO teams (id, code, name, coach_owner_id, created_at) VALUES (?, ?, ?, ?, ?)`)
+      .run(team.id, team.code, team.name, team.coachOwnerId, team.createdAt);
+    return team;
+  }
+
+  async getById(id: string): Promise<Team | null> {
+    const row = this.db.prepare(`SELECT * FROM teams WHERE id = ?`).get(id) as TeamRow | undefined;
+    return row ? toTeam(row) : null;
+  }
+
+  async getByCode(code: string): Promise<Team | null> {
+    const row = this.db.prepare(`SELECT * FROM teams WHERE code = ?`).get(code) as TeamRow | undefined;
+    return row ? toTeam(row) : null;
+  }
+
+  async listByCoach(coachOwnerId: string): Promise<Team[]> {
+    const rows = this.db
+      .prepare(`SELECT * FROM teams WHERE coach_owner_id = ? ORDER BY created_at`)
+      .all(coachOwnerId) as TeamRow[];
+    return rows.map(toTeam);
+  }
+
+  async delete(coachOwnerId: string, id: string): Promise<boolean> {
+    const info = this.db.prepare(`DELETE FROM teams WHERE id = ? AND coach_owner_id = ?`).run(id, coachOwnerId);
+    if (info.changes > 0) this.db.prepare(`DELETE FROM team_members WHERE team_id = ?`).run(id);
+    return info.changes > 0;
+  }
+
+  async addMember(m: TeamMember): Promise<TeamMember> {
+    this.db
+      .prepare(
+        `INSERT INTO team_members (team_id, profile_id, owner_id, joined_at) VALUES (?, ?, ?, ?)
+         ON CONFLICT (team_id, profile_id) DO NOTHING`,
+      )
+      .run(m.teamId, m.profileId, m.ownerId, m.joinedAt);
+    const row = this.db
+      .prepare(`SELECT * FROM team_members WHERE team_id = ? AND profile_id = ?`)
+      .get(m.teamId, m.profileId) as MemberRow;
+    return toMember(row);
+  }
+
+  async removeMember(teamId: string, profileId: string): Promise<boolean> {
+    const info = this.db
+      .prepare(`DELETE FROM team_members WHERE team_id = ? AND profile_id = ?`)
+      .run(teamId, profileId);
+    return info.changes > 0;
+  }
+
+  async listMembers(teamId: string): Promise<TeamMember[]> {
+    const rows = this.db
+      .prepare(`SELECT * FROM team_members WHERE team_id = ? ORDER BY joined_at`)
+      .all(teamId) as MemberRow[];
+    return rows.map(toMember);
+  }
+
+  async listMembershipsForProfile(ownerId: string, profileId: string): Promise<TeamMember[]> {
+    const rows = this.db
+      .prepare(`SELECT * FROM team_members WHERE owner_id = ? AND profile_id = ?`)
+      .all(ownerId, profileId) as MemberRow[];
+    return rows.map(toMember);
+  }
+
+  async deleteAllForOwner(ownerId: string): Promise<void> {
+    const teams = await this.listByCoach(ownerId);
+    for (const t of teams) await this.delete(ownerId, t.id);
+    this.db.prepare(`DELETE FROM team_members WHERE owner_id = ?`).run(ownerId);
   }
 }

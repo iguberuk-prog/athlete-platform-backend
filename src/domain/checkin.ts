@@ -33,6 +33,10 @@ export interface DailyCheckIn {
   trainingPlanned?: string;
   /** Whether the planned training was completed. */
   trainingCompleted?: boolean;
+  /** Minutes of training / match play today (for session load). */
+  sessionMinutes?: number;
+  /** Session effort 1-10 (RPE). Load = minutes x RPE (session-RPE method). */
+  sessionRpe?: number;
 
   // Advanced / wearable-sourced (optional)
   restingHeartRate?: number;

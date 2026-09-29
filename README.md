@@ -1,9 +1,47 @@
-# Athlete Performance Platform — Backend (Profile + Check-ins)
+# Athlete Performance Platform
 
-The backend foundation: a private **athlete profile** plus a daily **check-in**
-log. It stores everything personal about an athlete, validates it for safety,
-and serves it back — scoped so data is private to its owner. This is what the
-recommendation engine will read to produce daily fueling/recovery plans.
+Personal game-day fueling, recovery and readiness for athletes, parents and coaches.
+
+- **Web app / PWA**: `public/` (mobile-first, installable, works offline)
+- **API**: `netlify/functions/` on Netlify, data in Supabase
+- **iPhone app**: `mobile/` (Expo shell: local notifications + Apple Health)
+- **Launch steps**: `docs/LAUNCH_CHECKLIST.md` · **Store copy**: `docs/APP_STORE_LISTING.md`
+
+## What the app does
+
+| Screen | What it gives the athlete |
+|---|---|
+| Today | Day type (game, game tomorrow, recovery, practice, rest), readiness score, carb/protein/fluid targets scaled to body weight, focus list, next reminders |
+| Game Day | Hour-by-hour plan (list or calendar), night-before prep, early-kickoff handling, .ics / Google Calendar export |
+| Recovery | Multi-day plan after a game; links games 2 days apart into a tournament with fast-refuel windows |
+| Check-in | 30-second sleep/energy/soreness/stress/hydration + training minutes and effort; Apple Health fill on iPhone |
+| Trends | 28-day readiness and sleep, weekly training load with acute:chronic spike warning |
+| Grocery | 7-day allergy-safe shopping list from the schedule |
+| Team | Coaches create teams with a join code and see a limited roster; players join or leave |
+| Reminders | Fuel, hydration, recovery, check-in and wind-down nudges from the athlete's schedule |
+| Account | Password reset/change, data export, full account deletion |
+
+Accounts are **athlete** (13+), **parent** (manages several kids, required under 13) or **coach**.
+
+## New API endpoints
+
+| Method + path | Purpose |
+|---|---|
+| `GET /api/profiles/:id/today?date=&now=` | Today summary + today's reminders |
+| `GET /api/profiles/:id/recovery?date=&match=` | Multi-day / tournament recovery plan |
+| `GET /api/profiles/:id/trends?date=&days=28` | Trend series + load ratio |
+| `GET /api/profiles/:id/grocery?from=&days=7` | Grocery list |
+| `GET /api/profiles/:id/reminders?from=&days=7&now=&off=` | Reminder schedule (the iPhone app turns these into notifications) |
+| `DELETE /api/profiles/:id/events?startTime=&type=&series=` | Remove a game/practice, or a weekly series |
+| `GET/POST /api/profiles/:id/teams`, `DELETE .../teams/:teamId` | Join / leave a team |
+| `GET/POST /api/teams`, `GET /api/teams/:id/roster`, `DELETE /api/teams/:id[/members/:profileId]` | Coach teams |
+| `GET/DELETE /api/account` | Who am I / delete everything |
+
+Engines are pure functions in `src/domain/` (`daily.ts`, `recovery.ts`, `trends.ts`, `grocery.ts`, `reminders.ts`, `readiness.ts`) with tests in `scripts/test.ts` (116 checks).
+
+---
+
+## Original backend notes
 
 ## Tech choices
 

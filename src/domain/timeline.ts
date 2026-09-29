@@ -18,6 +18,7 @@
 import type { AthleteProfile } from "./profile.js";
 import type { DailyCheckIn } from "./checkin.js";
 import { safeFoodSuggestions } from "./plan.js";
+import { gameMorning, to12 } from "./dates.js";
 
 export interface TimelineEntry {
   time: string; // HH:MM
@@ -105,7 +106,8 @@ export function buildGameDayTimeline(
   opts: TimelineOptions,
 ): GameDayTimeline {
   const M = profile.anthropometrics.bodyMassKg;
-  const wake = opts.wakeTime || "07:00";
+  const morning = gameMorning(opts.kickoff, opts.wakeTime || "07:00");
+  const wake = morning.wake;
   const bed = opts.bedTime || "22:30";
   const kickMin = toMin(opts.kickoff);
   const carbs = safeFoodSuggestions(profile, "carb");
@@ -126,14 +128,24 @@ export function buildGameDayTimeline(
       time: wake,
       phase: "Wake-up",
       title: "Hydrate & light breakfast",
-      detail: "~500 ml water on waking; an easy carbohydrate breakfast to start topping up energy.",
+      detail: morning.earlyAlarm
+        ? `Early kickoff: set your alarm for ${to12(wake)}. Drink ~500 ml water on waking.`
+        : morning.lighter
+          ? "~500 ml water on waking. Your main meal comes soon, so keep this to a drink or a bite."
+          : "~500 ml water on waking; an easy carbohydrate breakfast to start topping up energy.",
       foods: carbs.slice(0, 3),
     },
     {
-      time: fromMin(snap15(kickMin - 210)),
+      time: morning.preMeal,
       phase: "Pre-game meal",
-      title: "Main fueling meal (3–4 h before kickoff)",
-      detail: `${range(1 * M, 3 * M, "g")} carbohydrate (1–3 g/kg); keep fat/fibre low to avoid GI upset.`,
+      title: morning.lighter
+        ? morning.gapMin <= 120 ? "Small, easy pre-game meal (early kickoff)" : "Lighter fueling meal (2.5–3 h before kickoff)"
+        : "Main fueling meal (3–4 h before kickoff)",
+      detail: morning.lighter
+        ? morning.gapMin <= 120
+          ? `About ${r(1 * M)} g easy carbohydrate (1 g/kg): banana, toast or a bagel with honey, or a smoothie. Almost no fat or fibre. Sip fluids.`
+          : `${range(1 * M, 2 * M, "g")} carbohydrate (1–2 g/kg), easy to digest: white rice, bagel or oats with banana and honey. Keep fat and fibre very low.`
+        : `${range(1 * M, 3 * M, "g")} carbohydrate (1–3 g/kg); keep fat/fibre low to avoid GI upset.`,
       foods: carbs.slice(0, 4),
     },
     {
@@ -247,7 +259,7 @@ export function buildGameDayTimeline(
   const n = profile.nutrition;
   const calendar: CalendarEvent[] = [
     { title: `${profile.identity.fullName} — Match`, start: `${opts.date}T${opts.kickoff}`, durationMin: 110, description: "Match-day fueling plan in the app." },
-    { title: "Pre-game meal", start: `${opts.date}T${fromMin(snap15(kickMin - 210))}`, durationMin: 45, description: `${range(1 * M, 3 * M, "g")} carbohydrate.` },
+    { title: "Pre-game meal", start: `${opts.date}T${morning.preMeal}`, durationMin: 45, description: `${range(1 * M, 3 * M, "g")} carbohydrate.` },
     { title: "Recovery feeding", start: `${opts.date}T${fromMin(snap15(fulltimeMin + 20))}`, durationMin: 30, description: `~${r(1.2 * M)} g carbs + 40 g protein.` },
     { title: "Night-before carb dinner", start: `${dayBefore.date}T18:30`, durationMin: 60, description: `Carb-focused dinner to top up glycogen before match day (aim ${range(6 * M, 8 * M, "g")} carbohydrate across the day).` },
   ];

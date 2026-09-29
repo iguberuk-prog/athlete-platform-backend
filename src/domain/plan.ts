@@ -13,6 +13,7 @@
 
 import type { AthleteProfile } from "./profile.js";
 import type { DailyCheckIn } from "./checkin.js";
+import { to12 } from "./dates.js";
 
 export interface PlanTarget {
   label: string;
@@ -60,15 +61,19 @@ export interface PlanOptions {
 
 // --- food list with allergen/diet tags ------------------------------------
 
-interface Food {
-  name: string;
-  kind: "carb" | "protein";
+/** Allergen/diet tags a food carries. Shared by the plan, timeline and grocery list. */
+export interface FoodTags {
   allergens?: string[]; // maps to ALLERGENS values
-  animal?: boolean; // excluded for vegan/vegetarian per rules below
+  animal?: boolean; // excluded for vegan
   meat?: boolean; // excluded for vegetarian/pescatarian
   fishOnly?: boolean; // a fish/seafood protein
   lactose?: boolean;
   gluten?: boolean;
+}
+
+interface Food extends FoodTags {
+  name: string;
+  kind: "carb" | "protein";
 }
 
 const FOODS: Food[] = [
@@ -92,12 +97,13 @@ const FOODS: Food[] = [
   { name: "almonds", kind: "protein", allergens: ["tree_nut"] },
 ];
 
-function safeFoods(
-  kind: "carb" | "protein",
+/** True when a food is safe for the given allergies, diets and intolerances. */
+export function foodAllowed(
+  f: FoodTags,
   allergens: string[],
   diets: string[],
   intolerances: string[],
-): string[] {
+): boolean {
   const vegan = diets.includes("vegan");
   const vegetarian = diets.includes("vegetarian") || vegan;
   const pescatarian = diets.includes("pescatarian");
@@ -106,16 +112,36 @@ function safeFoods(
   const nutFree = diets.includes("nut_free");
   const noLactose = intolerances.includes("lactose");
   const noGluten = glutenFree || intolerances.includes("gluten");
+  const tags = f.allergens || [];
+  if (tags.some((a) => allergens.includes(a))) return false;
+  if (vegan && f.animal) return false;
+  if (vegetarian && f.meat) return false; // vegetarians: no meat (eggs/dairy ok)
+  if (pescatarian && f.meat) return false; // pescatarians: no meat, fish ok
+  if ((dairyFree || noLactose) && (f.lactose || tags.includes("milk") && dairyFree)) return false;
+  if (noGluten && f.gluten) return false;
+  if (nutFree && tags.some((a) => a === "tree_nut" || a === "peanut")) return false;
+  return true;
+}
 
+/** Profile-level wrapper around foodAllowed. */
+export function foodAllowedFor(profile: AthleteProfile, f: FoodTags): boolean {
+  const n = profile.nutrition;
+  return foodAllowed(
+    f,
+    (n.allergies || []).map((a) => a.allergen),
+    n.dietaryRestrictions || [],
+    n.intolerances || [],
+  );
+}
+
+function safeFoods(
+  kind: "carb" | "protein",
+  allergens: string[],
+  diets: string[],
+  intolerances: string[],
+): string[] {
   return FOODS.filter((f) => f.kind === kind)
-    .filter((f) => !(f.allergens || []).some((a) => allergens.includes(a)))
-    .filter((f) => !(vegan && f.animal))
-    .filter((f) => !(vegetarian && f.meat)) // vegetarians: no meat (eggs/dairy ok)
-    .filter((f) => !(pescatarian && f.meat)) // pescatarians: no meat, fish ok
-    .filter((f) => !(dairyFree && f.lactose))
-    .filter((f) => !(noLactose && f.lactose))
-    .filter((f) => !((glutenFree || noGluten) && f.gluten))
-    .filter((f) => !(nutFree && (f.allergens || []).some((a) => a === "tree_nut" || a === "peanut")))
+    .filter((f) => foodAllowed(f, allergens, diets, intolerances))
     .map((f) => f.name);
 }
 
@@ -150,7 +176,7 @@ export function buildMatchDayPlan(profile: AthleteProfile, opts: PlanOptions): M
     },
     {
       phase: "Pre-match meal",
-      timing: `3–4 hours before kickoff (${opts.kickoff})`,
+      timing: `3–4 hours before kickoff (${to12(opts.kickoff)})`,
       targets: [
         { label: "Carbohydrate", detail: `${range(1 * M, 3 * M, "g")} (1–3 g/kg) in the meal` },
         { label: "Keep it familiar", detail: "Lower fat/fibre to avoid GI discomfort" },
@@ -217,7 +243,7 @@ export function buildMatchDayPlan(profile: AthleteProfile, opts: PlanOptions): M
     sport: profile.sport.primarySport,
     bodyMassKg: M,
     summary: `Match-day fueling plan for ${profile.identity.fullName} (${M} kg) on ${opts.date}` +
-      (opts.assumedKickoff ? " — assuming an evening kickoff; add your fixture to personalize timing." : `, kickoff ${opts.kickoff}.`),
+      (opts.assumedKickoff ? " — assuming an evening kickoff; add your fixture to personalize timing." : `, kickoff ${to12(opts.kickoff)}.`),
     blocks,
     safety: {
       avoidAllergens: allergens,

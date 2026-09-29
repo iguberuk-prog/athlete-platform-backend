@@ -8,3 +8,8 @@ node_modules/
 /dist/
 scripts/_smoke.ts
 scripts/_plansmoke.ts
+mobile/node_modules/
+mobile/.expo/
+mobile/dist/
+mobile/ios/
+mobile/android/

@@ -8,15 +8,15 @@
  *   PUT    /api/profiles/:id    replace one profile
  *   DELETE /api/profiles/:id    delete one profile
  *
- * Owner identity comes from the `x-owner-id` header (stand-in for real auth).
- * This is the single seam where a verified token (e.g. a Supabase JWT subject)
- * will plug in later — the rest of the stack already scopes to this owner id.
+ * Owner identity comes from the verified Supabase login (Bearer token).
+ * See src/auth.ts. Every query below is scoped to that account id.
  */
 
 import type { Config, Context } from "@netlify/functions";
 import { verifyUser } from "../../src/auth.js";
+import { errorResponse } from "../../src/http.js";
 import { getProfileService } from "../../src/container.js";
-import type { ProfileInput } from "../../src/domain/profile.js";
+import { effectiveAge, type ProfileInput } from "../../src/domain/profile.js";
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body, null, 2), {
@@ -26,8 +26,28 @@ function json(body: unknown, status = 200): Response {
 }
 
 
+/**
+ * Children under 13 need a parent account (COPPA / App Store kids rules).
+ * An athlete's own account cannot hold an under-13 profile.
+ */
+function under13(role: string | undefined, input: ProfileInput): Response | null {
+  if (role === "parent") return null;
+  const age = input?.identity ? effectiveAge(input.identity) : undefined;
+  if (age !== undefined && age < 13) {
+    return json(
+      {
+        error: "parent_required",
+        message: "Players under 13 need a parent or guardian to set up the account. Ask a parent to sign up with a parent account.",
+      },
+      403,
+    );
+  }
+  return null;
+}
+
 export default async (req: Request, context: Context): Promise<Response> => {
-  const ownerId = (await verifyUser(req))?.id ?? null;
+  const user = await verifyUser(req);
+  const ownerId = user?.id ?? null;
   if (!ownerId) {
     return json(
       { error: "unauthorized", message: "Please sign in." },
@@ -42,6 +62,8 @@ export default async (req: Request, context: Context): Promise<Response> => {
     switch (req.method) {
       case "POST": {
         const input = (await req.json()) as ProfileInput;
+        const young = under13(user?.role, input);
+        if (young) return young;
         const result = await service.create(ownerId, input);
         if (result.ok) return json(result.value, 201);
         return result.code === "validation"
@@ -61,6 +83,8 @@ export default async (req: Request, context: Context): Promise<Response> => {
       case "PUT": {
         if (!id) return json({ error: "id required in path" }, 400);
         const input = (await req.json()) as ProfileInput;
+        const young = under13(user?.role, input);
+        if (young) return young;
         const result = await service.update(ownerId, id, input);
         if (result.ok) return json(result.value);
         return result.code === "validation"
@@ -80,9 +104,7 @@ export default async (req: Request, context: Context): Promise<Response> => {
         return json({ error: "method_not_allowed" }, 405);
     }
   } catch (err) {
-    const e = err as Error & { cause?: { message?: string } };
-    const detail = e.cause?.message ? `${e.message}: ${e.cause.message}` : e.message;
-    return json({ error: "bad_request", message: detail }, 400);
+    return errorResponse(err);
   }
 };
 

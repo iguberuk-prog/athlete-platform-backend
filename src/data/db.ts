@@ -47,5 +47,23 @@ function migrate(db: DB): void {
       ON daily_checkins (owner_id, profile_id, date);
     CREATE UNIQUE INDEX IF NOT EXISTS uniq_checkin_per_day
       ON daily_checkins (owner_id, profile_id, date);
+
+    CREATE TABLE IF NOT EXISTS teams (
+      id              TEXT PRIMARY KEY,
+      code            TEXT NOT NULL UNIQUE,
+      name            TEXT NOT NULL,
+      coach_owner_id  TEXT NOT NULL,
+      created_at      TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_teams_coach ON teams (coach_owner_id);
+
+    CREATE TABLE IF NOT EXISTS team_members (
+      team_id     TEXT NOT NULL,
+      profile_id  TEXT NOT NULL,
+      owner_id    TEXT NOT NULL,
+      joined_at   TEXT NOT NULL,
+      PRIMARY KEY (team_id, profile_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_members_profile ON team_members (owner_id, profile_id);
   `);
 }

@@ -15,19 +15,39 @@ import { openDatabase } from "./data/db.js";
 import {
   SqliteAthleteProfileRepository,
   SqliteCheckInRepository,
+  SqliteTeamRepository,
 } from "./data/sqliteRepository.js";
 import {
   SupabaseAthleteProfileRepository,
   SupabaseCheckInRepository,
+  SupabaseTeamRepository,
 } from "./data/supabaseRepository.js";
+import type { AthleteProfileRepository, CheckInRepository, TeamRepository } from "./data/repository.js";
 import { ProfileService } from "./services/profileService.js";
 import { CheckInService } from "./services/checkinService.js";
 import { PlanService } from "./services/planService.js";
+import { InsightService } from "./services/insightService.js";
+import { TeamService } from "./services/teamService.js";
+import { AccountService } from "./services/accountService.js";
 
 interface Services {
   profiles: ProfileService;
   checkins: CheckInService;
   plans: PlanService;
+  insights: InsightService;
+  teams: TeamService;
+  account: AccountService;
+}
+
+function wire(p: AthleteProfileRepository, c: CheckInRepository, t: TeamRepository): Services {
+  return {
+    profiles: new ProfileService(p),
+    checkins: new CheckInService(c, p),
+    plans: new PlanService(p, c),
+    insights: new InsightService(p, c),
+    teams: new TeamService(t, p, c),
+    account: new AccountService(p, c, t),
+  };
 }
 
 let services: Services | null = null;
@@ -38,24 +58,20 @@ function build(): Services {
   if (backend === "supabase") {
     const url = process.env.SUPABASE_URL ?? "";
     const key = process.env.SUPABASE_SERVICE_KEY ?? "";
-    const profilesRepo = new SupabaseAthleteProfileRepository(url, key);
-    const checkinsRepo = new SupabaseCheckInRepository(url, key);
-    return {
-      profiles: new ProfileService(profilesRepo),
-      checkins: new CheckInService(checkinsRepo, profilesRepo),
-      plans: new PlanService(profilesRepo, checkinsRepo),
-    };
+    return wire(
+      new SupabaseAthleteProfileRepository(url, key),
+      new SupabaseCheckInRepository(url, key),
+      new SupabaseTeamRepository(url, key),
+    );
   }
 
   // Default: SQLite for local development (lazy-loads better-sqlite3).
   const db = openDatabase(process.env.SQLITE_PATH ?? "data/athlete.db");
-  const profilesRepo = new SqliteAthleteProfileRepository(db);
-  const checkinsRepo = new SqliteCheckInRepository(db);
-  return {
-    profiles: new ProfileService(profilesRepo),
-    checkins: new CheckInService(checkinsRepo, profilesRepo),
-    plans: new PlanService(profilesRepo, checkinsRepo),
-  };
+  return wire(
+    new SqliteAthleteProfileRepository(db),
+    new SqliteCheckInRepository(db),
+    new SqliteTeamRepository(db),
+  );
 }
 
 function getServices(): Services {
@@ -73,4 +89,16 @@ export function getCheckInService(): CheckInService {
 
 export function getPlanService(): PlanService {
   return getServices().plans;
+}
+
+export function getInsightService(): InsightService {
+  return getServices().insights;
+}
+
+export function getTeamService(): TeamService {
+  return getServices().teams;
+}
+
+export function getAccountService(): AccountService {
+  return getServices().account;
 }

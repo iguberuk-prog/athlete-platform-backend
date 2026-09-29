@@ -208,8 +208,8 @@ export type Mood = (typeof MOODS)[number];
  * to tune. Scales of 1-10 are validated separately via SCALE_MIN/SCALE_MAX.
  */
 export const BOUNDS = {
-  heightCm: { min: 120, max: 230 },
-  bodyMassKg: { min: 35, max: 160 },
+  heightCm: { min: 100, max: 230 },
+  bodyMassKg: { min: 20, max: 160 },
   bodyFatPct: { min: 3, max: 50 },
   age: { min: 8, max: 60 },
   yearsPlaying: { min: 0, max: 50 },
@@ -226,6 +226,7 @@ export const BOUNDS = {
   sweatRateLitresPerHour: { min: 0, max: 5 },
   estimatedCalorieExpenditure: { min: 0, max: 10000 },
   sleepHoursLastNight: { min: 0, max: 16 },
+  sessionMinutes: { min: 0, max: 600 },
 } as const;
 
 /** Inclusive bounds for 1-10 subjective scales. */

@@ -3,12 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Backend for the Athlete Performance Platform — athlete profile service.",
+  "description": "Athlete Performance Platform: backend, web app and PWA.",
   "scripts": {
     "demo": "tsx scripts/demo.ts",
     "test": "tsx scripts/test.ts",
     "typecheck": "tsc --noEmit",
-    "dev": "netlify dev"
+    "dev": "netlify dev",
+    "devserver": "tsx scripts/devserver.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.106.2",

@@ -147,6 +147,13 @@ function validateIdentity(errors: ValidationError[], input: ProfileInput): void 
     errors.push({ path: "identity.age", message: `age must be between ${BOUNDS.age.min} and ${BOUNDS.age.max}` });
   }
 
+  if (id.avatarUrl !== undefined && id.avatarUrl !== null) {
+    if (typeof id.avatarUrl !== "string" || !/^data:image\/(jpeg|png|webp);base64,/.test(id.avatarUrl)) {
+      errors.push({ path: "identity.avatarUrl", message: "must be an uploaded photo" });
+    } else if (id.avatarUrl.length > 300_000) {
+      errors.push({ path: "identity.avatarUrl", message: "photo is too large" });
+    }
+  }
   if (id.graduationYear !== undefined && !isNumber(id.graduationYear)) {
     errors.push({ path: "identity.graduationYear", message: "must be a number" });
   }
@@ -362,6 +369,21 @@ function validateSchedule(errors: ValidationError[], input: ProfileInput): void 
   }
 }
 
+const isHHMM = (v: unknown): boolean =>
+  typeof v === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(v);
+
+function validateRoutine(errors: ValidationError[], input: ProfileInput): void {
+  const r = input.routine;
+  if (r === undefined) return;
+  if (!r || typeof r !== "object") {
+    errors.push({ path: "routine", message: "must be an object" });
+    return;
+  }
+  for (const f of ["wakeTime", "bedTime", "usualPracticeTime"] as const) {
+    if (r[f] !== undefined && !isHHMM(r[f])) errors.push({ path: `routine.${f}`, message: "must be HH:MM" });
+  }
+}
+
 // --- top-level: profile ----------------------------------------------------
 
 export function validateProfileInput(input: ProfileInput): ValidationResult {
@@ -380,6 +402,7 @@ export function validateProfileInput(input: ProfileInput): ValidationResult {
   validateGoals(errors, input);
   validateAdvanced(errors, input);
   validateSchedule(errors, input);
+  validateRoutine(errors, input);
 
   return { valid: errors.length === 0, errors };
 }
@@ -407,6 +430,8 @@ export function validateCheckInInput(input: CheckInInput): ValidationResult {
   }
   rangeCheck(errors, "restingHeartRate", input.restingHeartRate, BOUNDS.restingHeartRate, false);
   rangeCheck(errors, "hrvMs", input.hrvMs, BOUNDS.hrvMs, false);
+  rangeCheck(errors, "sessionMinutes", input.sessionMinutes, BOUNDS.sessionMinutes, false);
+  scaleCheck(errors, "sessionRpe", input.sessionRpe);
 
   return { valid: errors.length === 0, errors };
 }

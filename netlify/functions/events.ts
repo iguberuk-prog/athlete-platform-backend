@@ -4,6 +4,8 @@
  *   GET  /api/profiles/:id/events            list scheduled events (soonest first)
  *   POST /api/profiles/:id/events            append one or more events
  *        body: { events: [{ type, startTime, conditions?, importance? }, ...] }
+ *   DELETE /api/profiles/:id/events?startTime=...&type=...&series=true
+ *        remove one event, or a repeating series from that date on
  *
  * Used by the "Create Event" UI to add a single match/practice or a repeating
  * practice schedule (the client expands the recurrence into a list of events).
@@ -11,6 +13,7 @@
 
 import type { Config, Context } from "@netlify/functions";
 import { verifyUser } from "../../src/auth.js";
+import { errorResponse } from "../../src/http.js";
 import { getProfileService } from "../../src/container.js";
 import type { ScheduledEvent } from "../../src/domain/profile.js";
 
@@ -46,11 +49,20 @@ export default async (req: Request, context: Context): Promise<Response> => {
         ? json({ error: "validation_failed", details: result.errors }, 422)
         : json({ error: "not_found" }, 404);
     }
+    if (req.method === "DELETE") {
+      const url = new URL(req.url);
+      const startTime = url.searchParams.get("startTime");
+      if (!startTime) return json({ error: "startTime query parameter required" }, 400);
+      const result = await service.removeEvents(ownerId, id, {
+        startTime,
+        type: url.searchParams.get("type") || undefined,
+        series: url.searchParams.get("series") === "true",
+      });
+      return result.ok ? json(result.value) : json({ error: "not_found" }, 404);
+    }
     return json({ error: "method_not_allowed" }, 405);
   } catch (err) {
-    const e = err as Error & { cause?: { message?: string } };
-    const detail = e.cause?.message ? `${e.message}: ${e.cause.message}` : e.message;
-    return json({ error: "bad_request", message: detail }, 400);
+    return errorResponse(err);
   }
 };
 

@@ -7,7 +7,7 @@
  * Access is gated by a shared admin passcode: the caller must send
  * `x-admin-key` matching the ADMIN_KEY environment variable. This is a simple
  * stand-in for a full admin role and is intentionally separate from the
- * per-athlete `x-owner-id` scoping used everywhere else.
+ * per-account login scoping used everywhere else.
  */
 
 import type { Config, Context } from "@netlify/functions";

@@ -21,13 +21,17 @@ import WebSocket from "ws";
 import { randomUUID } from "node:crypto";
 import type { AthleteProfile, ProfileInput } from "../domain/profile.js";
 import type { CheckInInput, DailyCheckIn } from "../domain/checkin.js";
+import type { Team, TeamMember } from "../domain/team.js";
 import type {
   AthleteProfileRepository,
   CheckInRepository,
+  TeamRepository,
 } from "./repository.js";
 
 const PROFILES = "athlete_profiles";
 const CHECKINS = "daily_checkins";
+const TEAMS = "teams";
+const MEMBERS = "team_members";
 
 function makeClient(url: string, serviceKey: string): SupabaseClient {
   if (!url || !serviceKey) {
@@ -210,5 +214,140 @@ export class SupabaseCheckInRepository implements CheckInRepository {
       .select("id");
     if (error) throw error;
     return (data?.length ?? 0) > 0;
+  }
+
+  async deleteByProfile(ownerId: string, profileId: string): Promise<number> {
+    const { data, error } = await this.client
+      .from(CHECKINS)
+      .delete()
+      .eq("owner_id", ownerId)
+      .eq("profile_id", profileId)
+      .select("id");
+    if (error) throw error;
+    return data?.length ?? 0;
+  }
+}
+
+interface TeamRow {
+  id: string;
+  code: string;
+  name: string;
+  coach_owner_id: string;
+  created_at: string;
+}
+interface MemberRow {
+  team_id: string;
+  profile_id: string;
+  owner_id: string;
+  joined_at: string;
+}
+const toTeam = (r: TeamRow): Team => ({
+  id: r.id, code: r.code, name: r.name, coachOwnerId: r.coach_owner_id, createdAt: r.created_at,
+});
+const toMember = (r: MemberRow): TeamMember => ({
+  teamId: r.team_id, profileId: r.profile_id, ownerId: r.owner_id, joinedAt: r.joined_at,
+});
+
+export class SupabaseTeamRepository implements TeamRepository {
+  private client: SupabaseClient;
+  constructor(url: string, serviceKey: string) {
+    this.client = makeClient(url, serviceKey);
+  }
+
+  async create(coachOwnerId: string, name: string, code: string): Promise<Team> {
+    const team: Team = { id: randomUUID(), name, code, coachOwnerId, createdAt: new Date().toISOString() };
+    const { error } = await this.client.from(TEAMS).insert({
+      id: team.id, code, name, coach_owner_id: coachOwnerId, created_at: team.createdAt,
+    });
+    if (error) throw error;
+    return team;
+  }
+
+  async getById(id: string): Promise<Team | null> {
+    const { data, error } = await this.client.from(TEAMS).select("*").eq("id", id).maybeSingle();
+    if (error) throw error;
+    return data ? toTeam(data as TeamRow) : null;
+  }
+
+  async getByCode(code: string): Promise<Team | null> {
+    const { data, error } = await this.client.from(TEAMS).select("*").eq("code", code).maybeSingle();
+    if (error) throw error;
+    return data ? toTeam(data as TeamRow) : null;
+  }
+
+  async listByCoach(coachOwnerId: string): Promise<Team[]> {
+    const { data, error } = await this.client
+      .from(TEAMS)
+      .select("*")
+      .eq("coach_owner_id", coachOwnerId)
+      .order("created_at", { ascending: true });
+    if (error) throw error;
+    return (data ?? []).map((r) => toTeam(r as TeamRow));
+  }
+
+  async delete(coachOwnerId: string, id: string): Promise<boolean> {
+    // team_members rows go with it (on delete cascade).
+    const { data, error } = await this.client
+      .from(TEAMS)
+      .delete()
+      .eq("id", id)
+      .eq("coach_owner_id", coachOwnerId)
+      .select("id");
+    if (error) throw error;
+    return (data?.length ?? 0) > 0;
+  }
+
+  async addMember(m: TeamMember): Promise<TeamMember> {
+    const { error } = await this.client.from(MEMBERS).upsert(
+      { team_id: m.teamId, profile_id: m.profileId, owner_id: m.ownerId, joined_at: m.joinedAt },
+      { onConflict: "team_id,profile_id", ignoreDuplicates: true },
+    );
+    if (error) throw error;
+    const { data, error: e2 } = await this.client
+      .from(MEMBERS)
+      .select("*")
+      .eq("team_id", m.teamId)
+      .eq("profile_id", m.profileId)
+      .maybeSingle();
+    if (e2) throw e2;
+    return data ? toMember(data as MemberRow) : m;
+  }
+
+  async removeMember(teamId: string, profileId: string): Promise<boolean> {
+    const { data, error } = await this.client
+      .from(MEMBERS)
+      .delete()
+      .eq("team_id", teamId)
+      .eq("profile_id", profileId)
+      .select("team_id");
+    if (error) throw error;
+    return (data?.length ?? 0) > 0;
+  }
+
+  async listMembers(teamId: string): Promise<TeamMember[]> {
+    const { data, error } = await this.client
+      .from(MEMBERS)
+      .select("*")
+      .eq("team_id", teamId)
+      .order("joined_at", { ascending: true });
+    if (error) throw error;
+    return (data ?? []).map((r) => toMember(r as MemberRow));
+  }
+
+  async listMembershipsForProfile(ownerId: string, profileId: string): Promise<TeamMember[]> {
+    const { data, error } = await this.client
+      .from(MEMBERS)
+      .select("*")
+      .eq("owner_id", ownerId)
+      .eq("profile_id", profileId);
+    if (error) throw error;
+    return (data ?? []).map((r) => toMember(r as MemberRow));
+  }
+
+  async deleteAllForOwner(ownerId: string): Promise<void> {
+    const { error: e1 } = await this.client.from(TEAMS).delete().eq("coach_owner_id", ownerId);
+    if (e1) throw e1;
+    const { error: e2 } = await this.client.from(MEMBERS).delete().eq("owner_id", ownerId);
+    if (e2) throw e2;
   }
 }

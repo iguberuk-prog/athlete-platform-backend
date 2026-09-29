@@ -1,0 +1,60 @@
+{
+  "expo": {
+    "name": "Athlete Performance",
+    "slug": "athlete-performance",
+    "scheme": "athleteperformance",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#0b0e12",
+    "ios": {
+      "bundleIdentifier": "com.guberuk.athleteperformance",
+      "buildNumber": "1",
+      "supportsTablet": false,
+      "config": { "usesNonExemptEncryption": false },
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
+        "UIBackgroundModes": []
+      }
+    },
+    "android": {
+      "package": "com.guberuk.athleteperformance",
+      "adaptiveIcon": {
+        "backgroundColor": "#0b0e12",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "plugins": [
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 160,
+          "backgroundColor": "#0b0e12"
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#bff63f"
+        }
+      ],
+      [
+        "@kingstinct/react-native-healthkit",
+        {
+          "NSHealthShareUsageDescription": "Athlete Performance reads last night's sleep, resting heart rate and heart-rate variability to fill in your daily check-in. It never writes to Health or shares this data.",
+          "NSHealthUpdateUsageDescription": "Athlete Performance does not write to Apple Health.",
+          "background": false
+        }
+      ]
+    ],
+    "extra": {
+      "appUrl": "https://peaceful-paletas-0a1cb4.netlify.app"
+    }
+  }
+}

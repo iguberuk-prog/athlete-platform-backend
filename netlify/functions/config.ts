@@ -15,6 +15,8 @@ export default async (): Promise<Response> => {
   const body = {
     supabaseUrl: process.env.SUPABASE_URL ?? "",
     supabaseAnonKey: process.env.SUPABASE_ANON_KEY ?? "",
+    // Local development login (never on with the Supabase backend).
+    devAuth: process.env.ALLOW_DEV_AUTH === "1" && process.env.DB_BACKEND !== "supabase" && !process.env.NETLIFY,
   };
   return new Response(JSON.stringify(body), {
     status: 200,

@@ -208,6 +208,16 @@ export interface Schedule {
   tournamentWeekends?: string[];
 }
 
+/** Daily routine used to anchor plans and reminders. */
+export interface Routine {
+  /** HH:MM, local time. */
+  wakeTime?: string;
+  /** HH:MM, local time. */
+  bedTime?: string;
+  /** HH:MM usual practice start, used when a practice has no time. */
+  usualPracticeTime?: string;
+}
+
 // --- the full profile ------------------------------------------------------
 
 export interface AthleteProfile {
@@ -228,6 +238,7 @@ export interface AthleteProfile {
   goals?: GoalsProfile;
   advanced?: AdvancedMetrics;
   schedule?: Schedule;
+  routine?: Routine;
 
   createdAt: string;
   updatedAt: string;

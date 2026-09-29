@@ -11,6 +11,7 @@
 
 import type { Config, Context } from "@netlify/functions";
 import { verifyUser } from "../../src/auth.js";
+import { errorResponse } from "../../src/http.js";
 import { getPlanService } from "../../src/container.js";
 
 function json(body: unknown, status = 200): Response {
@@ -46,9 +47,7 @@ export default async (req: Request, context: Context): Promise<Response> => {
     });
     return result.ok ? json(result.value) : json({ error: "not_found" }, 404);
   } catch (err) {
-    const e = err as Error & { cause?: { message?: string } };
-    const detail = e.cause?.message ? `${e.message}: ${e.cause.message}` : e.message;
-    return json({ error: "bad_request", message: detail }, 400);
+    return errorResponse(err);
   }
 };
 

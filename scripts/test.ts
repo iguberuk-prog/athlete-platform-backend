@@ -14,6 +14,16 @@ import type { CheckInInput } from "../src/domain/checkin.js";
 import { buildMatchDayPlan } from "../src/domain/plan.js";
 import { buildGameDayTimeline } from "../src/domain/timeline.js";
 import type { AthleteProfile } from "../src/domain/profile.js";
+import { SqliteTeamRepository } from "../src/data/sqliteRepository.js";
+import { TeamService } from "../src/services/teamService.js";
+import { AccountService } from "../src/services/accountService.js";
+import { computeReadiness } from "../src/domain/readiness.js";
+import { buildToday, classifyDay, dailyTargets } from "../src/domain/daily.js";
+import { buildRecoveryPlan } from "../src/domain/recovery.js";
+import { buildTrends } from "../src/domain/trends.js";
+import { buildGroceryList } from "../src/domain/grocery.js";
+import { buildReminders } from "../src/domain/reminders.js";
+import { addDays } from "../src/domain/dates.js";
 
 let passed = 0;
 let failed = 0;
@@ -151,6 +161,13 @@ async function main(): Promise<void> {
   ageOnly.identity.age = 21;
   check("explicit age accepted when DOB absent", (await profiles.create(owner, ageOnly)).ok);
 
+  const extAvatar = validProfile();
+  extAvatar.identity.avatarUrl = "https://evil.example/pixel.png";
+  check("external avatar URLs rejected", !(await profiles.create(owner, extAvatar)).ok);
+  const okAvatar = validProfile();
+  okAvatar.identity.avatarUrl = "data:image/jpeg;base64,/9j/4AAQSkZJRg==";
+  check("uploaded photo (data URL) accepted", (await profiles.create(owner, okAvatar)).ok);
+
   const badScale = validProfile();
   badScale.recovery!.sleepQuality = 99;
   check("out-of-range 1-10 scale rejected", !(await profiles.create(owner, badScale)).ok);
@@ -238,6 +255,181 @@ async function main(): Promise<void> {
   } else {
     check("timeline profile available", false);
   }
+
+  console.log("\nReadiness");
+  {
+    const base = { id: "c", ownerId: owner, profileId: id, createdAt: "", date: "2026-06-02" };
+    const good = computeReadiness({ ...base, sleepHoursLastNight: 9, energyLevel: 9, sorenessLevel: 2, stressLevel: 2, hydrationLevel: 8 });
+    const bad = computeReadiness({ ...base, sleepHoursLastNight: 5, energyLevel: 3, sorenessLevel: 9, stressLevel: 8, hydrationLevel: 3 });
+    check("well-rested check-in scores ready", !!good && good.status === "ready" && good.score >= 75);
+    check("rough check-in scores low with limiters", !!bad && bad.status === "low" && bad.limiters.includes("sleep"));
+    check("partial check-in still scores", computeReadiness({ ...base, energyLevel: 7 })?.score !== undefined);
+    check("no check-in -> null", computeReadiness(null) === null);
+  }
+
+  // A schedule to drive the day engines: games on Sat 10:00 + Sun 09:00 (tournament),
+  // practices Tue/Thu, and a lone game two weeks later.
+  const sched = validProfile();
+  sched.schedule = {
+    events: [
+      { type: "training", startTime: "2026-10-06T17:00", importance: "normal" },
+      { type: "training", startTime: "2026-10-08T17:00", importance: "normal" },
+      { type: "training", startTime: "2026-10-13T17:00", importance: "normal" },
+      { type: "match", startTime: "2026-10-10T10:00", importance: "high" },
+      { type: "match", startTime: "2026-10-10T15:00", importance: "high" },
+      { type: "match", startTime: "2026-10-11T09:00", importance: "high" },
+      { type: "match", startTime: "2026-10-24T19:00", importance: "high" },
+    ],
+  };
+  sched.routine = { wakeTime: "07:00", bedTime: "22:00" };
+  const sp = await profiles.create(owner, sched);
+  const S = sp.ok ? sp.value : (null as unknown as AthleteProfile);
+  check("profile with routine validates", sp.ok);
+  const badRoutine = validProfile();
+  badRoutine.routine = { wakeTime: "7am" };
+  check("bad routine time rejected", !(await profiles.create(owner, badRoutine)).ok);
+
+  console.log("\nDay types + targets");
+  check("practice day classified", classifyDay(S, "2026-10-06") === "training");
+  check("day before game classified", classifyDay(S, "2026-10-09") === "match_eve");
+  check("game day classified", classifyDay(S, "2026-10-10") === "match");
+  check("day after last game is recovery", classifyDay(S, "2026-10-12") === "recovery");
+  check("empty day is rest", classifyDay(S, "2026-10-15") === "rest");
+  const rest = dailyTargets(S, "2026-10-15");
+  const game = dailyTargets(S, "2026-10-10");
+  check("rest-day carbs 3-5 g/kg (75kg -> 225-375)", rest.carbsG[0] === 225 && rest.carbsG[1] === 375);
+  check("game-day carbs higher than rest", game.carbsG[0] > rest.carbsG[0]);
+  check("game-day fluids higher than rest", game.fluidsL > rest.fluidsL);
+  const today = buildToday(S, "2026-10-10", null);
+  check("Today flags tournament stretch", today.tournament && /Tournament/.test(today.focus[0]));
+  check("Today lists both games", today.todaysEvents.filter((e) => e.type === "match").length === 2);
+  check("Today next match is today", today.nextMatch?.daysAway === 0);
+
+  console.log("\nEarly kickoffs");
+  {
+    const { gameMorning } = await import("../src/domain/dates.js");
+    const normal = gameMorning("19:00", "07:00");
+    check("evening game: meal 3.5h before, wake unchanged", normal.preMeal === "15:30" && normal.wake === "07:00" && !normal.lighter);
+    const early = gameMorning("10:00", "07:00");
+    check("10am game: meal after waking, lighter", early.preMeal === "07:30" && early.wake === "07:00" && early.lighter);
+    const nine = gameMorning("09:00", "07:00");
+    check("9am game: small meal 90 min out, normal alarm", nine.preMeal === "07:30" && nine.wake === "07:00" && nine.gapMin === 90);
+    const dawn = gameMorning("08:00", "07:00");
+    check("8am game: alarm 2h before (6:00), meal 90 min out", dawn.earlyAlarm && dawn.wake === "06:00" && dawn.preMeal === "06:30");
+    const tl = buildGameDayTimeline(S, { date: "2026-10-10", kickoff: "10:00", wakeTime: "07:00" });
+    const wakeE = tl.entries.find((e) => e.phase === "Wake-up")!, mealE = tl.entries.find((e) => e.phase === "Pre-game meal")!;
+    check("timeline never puts the meal before wake-up", mealE.time > wakeE.time);
+  }
+
+  console.log("\nRecovery planner");
+  const rec = buildRecoveryPlan(S, { today: "2026-10-11" });
+  check("recovery links the 3 weekend games", rec.tournament && rec.matches.length === 3);
+  check("same-day doubleheader gets a fast refuel window", rec.windows[0]?.kind === "fast");
+  check("overnight gap gets a next-day window", rec.windows[1]?.kind === "same_or_next_day");
+  check("plan runs through 2 days after the last game", rec.days[rec.days.length - 1].date === "2026-10-13");
+  check("fast window scales carbs to mass (75kg -> ~85 g/h)", /8[05] g carbs per hour/.test(rec.windows[0].steps[0]));
+  const none = buildRecoveryPlan(S, { today: "2026-10-20" });
+  check("no recent game -> friendly empty state", none.anchor === null && !!none.message);
+  const single = buildRecoveryPlan(S, { today: "2026-10-25" });
+  check("single game -> not a tournament", !single.tournament && single.days.length === 3);
+
+  console.log("\nTrends");
+  {
+    const cis = [] as import("../src/domain/checkin.js").DailyCheckIn[];
+    for (let i = 0; i < 28; i++) {
+      const date = addDays("2026-10-01", i);
+      const heavy = i >= 21; // last week doubles the load
+      cis.push({ id: "t" + i, ownerId: owner, profileId: id, createdAt: "", date,
+        sleepHoursLastNight: 8, energyLevel: 7, sorenessLevel: heavy ? 7 : 3,
+        sessionMinutes: 60, sessionRpe: heavy ? 9 : 4 });
+    }
+    const tr = buildTrends(id, cis, "2026-10-28");
+    check("trend series covers 28 days", tr.days.length === 28);
+    check("load spike detected", tr.load.status === "spike" && (tr.load.ratio ?? 0) > 1.5);
+    check("check-in streak counted", tr.checkinStreak === 28);
+    check("7-day soreness average reflects heavy week", tr.averages7.soreness === 7);
+    const thin = buildTrends(id, cis.slice(-5), "2026-10-28");
+    check("short history -> not enough data", thin.load.status === "not_enough_data");
+  }
+
+  console.log("\nGrocery list");
+  const g = buildGroceryList(S, "2026-10-05", 7);
+  const allItems = g.sections.flatMap((s) => s.items.map((i) => i.name));
+  check("grocery counts 2 game days (Sat doubleheader + Sun)", g.dayCounts.match === 2 && g.dayCounts.training === 2);
+  check("peanut allergy removes peanut butter", !allItems.some((n) => /peanut/i.test(n)));
+  check("game-day section has sports drinks", allItems.some((n) => /Sports drink/.test(n)));
+  const veganP = { ...S, nutrition: { ...S.nutrition, dietaryRestrictions: ["vegan"] as never[], intolerances: [] } } as AthleteProfile;
+  const vg = buildGroceryList(veganP, "2026-10-05").sections.flatMap((s) => s.items.map((i) => i.name));
+  check("vegan list has no chicken, eggs or yogurt", !vg.some((n) => /Chicken|Eggs|yogurt/.test(n)));
+  check("vegan list still has plant protein", vg.some((n) => /Tofu|Lentils/.test(n)));
+  const gfP = { ...S, nutrition: { ...S.nutrition, dietaryRestrictions: ["gluten_free"] as never[] } } as AthleteProfile;
+  const gf = buildGroceryList(gfP, "2026-10-05").sections.flatMap((s) => s.items.map((i) => i.name));
+  check("gluten-free swaps in GF pasta, drops bread", gf.includes("Gluten-free pasta") && !gf.includes("Bread or bagels"));
+  const dfP = { ...S, nutrition: { ...S.nutrition, dietaryRestrictions: ["dairy_free"] as never[] } } as AthleteProfile;
+  const dfPlan = buildMatchDayPlan(dfP, { date: "2026-10-10", kickoff: "10:00", assumedKickoff: false });
+  check("dairy-free plan excludes whey shake", !dfPlan.blocks.flatMap((b) => b.foods || []).includes("whey shake"));
+
+  console.log("\nReminders");
+  const rem = buildReminders(S, { from: "2026-10-10", days: 1 });
+  check("10:00 kickoff, 07:00 wake: meal moves to 07:30 (lighter), not before waking", rem.some((r) => r.at === "2026-10-10T07:30" && r.title === "Pre-game meal now" && /Lighter/.test(r.body)));
+  check("second game same day gets its own meal 3h before (12:00)", rem.some((r) => r.at === "2026-10-10T12:00" && r.title === "Pre-game meal now"));
+  check("reminder text uses 12-hour times", rem.every((r) => !/\b(1[3-9]|2[0-3]):\d\d\b/.test(r.body)));
+  check("recovery snack after each game", rem.filter((r) => r.title === "Recovery snack now").length === 2);
+  check("reminder ids are unique", new Set(rem.map((r) => r.id)).size === rem.length);
+  check("reminders sorted by time", rem.every((r, i) => i === 0 || rem[i - 1].at <= r.at));
+  const eve = buildReminders(S, { from: "2026-10-09", days: 1 });
+  check("night before a game: carb dinner + wind-down", eve.some((r) => /carb dinner/.test(r.title)) && eve.some((r) => /Big day tomorrow/.test(r.title)));
+  const later = buildReminders(S, { from: "2026-10-10", days: 1, now: "2026-10-10T12:00" });
+  check("past reminders filtered by now", later.every((r) => r.at > "2026-10-10T12:00"));
+  const noHydrate = buildReminders(S, { from: "2026-10-06", days: 1, prefs: { hydrate: false } });
+  check("reminder kinds can be switched off", !noHydrate.some((r) => r.kind === "hydrate") && noHydrate.some((r) => r.title === "Pre-practice snack"));
+
+  console.log("\nEvent removal");
+  const rm1 = await profiles.removeEvents(owner, S.id, { startTime: "2026-10-24T19:00", type: "match" });
+  check("single event removed", rm1.ok && !rm1.value.schedule!.events.some((e) => e.startTime === "2026-10-24T19:00"));
+  const rmSeries = await profiles.removeEvents(owner, S.id, { startTime: "2026-10-06T17:00", type: "training", series: true });
+  check("repeating Tuesday practices removed from that date on", rmSeries.ok && rmSeries.value.schedule!.events.filter((e) => e.type === "training").length === 1);
+  check("other owner cannot remove events", !(await profiles.removeEvents(otherOwner, S.id, { startTime: "2026-10-10T10:00" })).ok);
+
+  console.log("\nTeams (coach roster)");
+  const teamRepo = new SqliteTeamRepository(db);
+  const teams = new TeamService(teamRepo, profileRepo, checkinRepo);
+  const coach = "coach-C";
+  const t = await teams.create(coach, "U17 Boys");
+  check("coach creates team with 6-char code", t.ok && /^[A-Z2-9]{6}$/.test(t.value.code));
+  check("empty team name rejected", !(await teams.create(coach, "  ")).ok);
+  const teamId = t.ok ? t.value.id : "";
+  const code = t.ok ? t.value.code : "";
+  check("wrong code rejected", !(await teams.join(owner, S.id, "NOPE00")).ok);
+  check("cannot join someone else's profile", !(await teams.join(otherOwner, S.id, code)).ok);
+  const j = await teams.join(owner, S.id, code.toLowerCase());
+  check("player joins with code (case-insensitive)", j.ok);
+  await teams.join(owner, S.id, code);
+  await checkins.log(owner, { profileId: S.id, date: "2026-10-09", sleepHoursLastNight: 8, energyLevel: 8, sorenessLevel: 3 });
+  const roster = await teams.roster(coach, teamId, "2026-10-09");
+  check("rejoin does not duplicate", roster.ok && roster.value.players.length === 1);
+  const pl = roster.ok ? roster.value.players[0] : null;
+  check("roster shows readiness + next game", !!pl && !!pl.readiness && pl.nextMatch?.date === "2026-10-10");
+  check("roster shows allergies for team meals", !!pl && pl.allergies.includes("peanut"));
+  check("roster hides contact details", !!pl && !("contact" in pl) && !JSON.stringify(pl).includes("parent@example.com"));
+  check("another coach is forbidden", (await teams.roster("coach-X", teamId, "2026-10-09")).ok === false);
+  const mine = await teams.teamsForProfile(owner, S.id);
+  check("player sees their teams", mine.ok && mine.value[0]?.name === "U17 Boys");
+  check("player leaves team", (await teams.leave(owner, S.id, teamId)).ok);
+  const after = await teams.roster(coach, teamId, "2026-10-09");
+  check("roster empty after leaving", after.ok && after.value.players.length === 0);
+
+  console.log("\nAccount deletion");
+  await teams.join(owner, S.id, code);
+  const account = new AccountService(profileRepo, checkinRepo, teamRepo);
+  const beforeCount = (await profiles.list(owner)).length;
+  const report = await account.deleteAllData(owner);
+  check("deletes every profile the account owns", report.profiles === beforeCount && (await profiles.list(owner)).length === 0);
+  check("deletes check-ins too", report.checkins >= 2 && (await checkins.list(owner, S.id)).length === 0);
+  const r2 = await teams.roster(coach, teamId, "2026-10-09");
+  check("deleted player leaves coach rosters", r2.ok && r2.value.players.length === 0);
+  await account.deleteAllData(coach);
+  check("coach deletion removes their teams", (await teams.listMine(coach)).length === 0);
 
   db.close();
   console.log(`\n${passed} passed, ${failed} failed`);

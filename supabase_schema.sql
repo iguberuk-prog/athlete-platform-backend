@@ -28,24 +28,5 @@ create table if not exists daily_checkins (
 create index if not exists idx_checkins_profile
   on daily_checkins (owner_id, profile_id, date);
 
--- ============================================================================
--- NOTE ON SECURITY (read before going live with real users)
--- ----------------------------------------------------------------------------
--- The backend connects with the Supabase SERVICE ROLE key (server-side, trusted)
--- and scopes every query by owner_id, so data is already private per owner.
---
--- When you add Supabase Auth (real logins), do two things:
---   1) Set owner_id from the authenticated user (auth.uid()) instead of the
---      x-owner-id header (change getOwnerId() in the Netlify functions).
---   2) Enable the Row Level Security policies below for defence in depth.
---
--- To enable later, change owner_id columns to `uuid` referencing auth.users and
--- run:
---
---   alter table athlete_profiles enable row level security;
---   alter table daily_checkins   enable row level security;
---   create policy "owner rw profiles" on athlete_profiles
---     for all using (auth.uid() = owner_id) with check (auth.uid() = owner_id);
---   create policy "owner rw checkins" on daily_checkins
---     for all using (auth.uid() = owner_id) with check (auth.uid() = owner_id);
--- ============================================================================
+-- Teams, membership and Row Level Security live in
+-- supabase/002_teams_and_security.sql. Run that file after this one.

@@ -6,11 +6,12 @@
  *   GET    /api/profiles/:profileId/checkins        list recent check-ins (?limit=N)
  *   DELETE /api/profiles/:profileId/checkins/:id    delete a check-in
  *
- * Owner identity comes from the `x-owner-id` header (stand-in for real auth).
+ * Owner identity comes from the verified Supabase login (Bearer token).
  */
 
 import type { Config, Context } from "@netlify/functions";
 import { verifyUser } from "../../src/auth.js";
+import { errorResponse } from "../../src/http.js";
 import { getCheckInService } from "../../src/container.js";
 import type { CheckInInput } from "../../src/domain/checkin.js";
 
@@ -68,9 +69,7 @@ export default async (req: Request, context: Context): Promise<Response> => {
         return json({ error: "method_not_allowed" }, 405);
     }
   } catch (err) {
-    const e = err as Error & { cause?: { message?: string } };
-    const detail = e.cause?.message ? `${e.message}: ${e.cause.message}` : e.message;
-    return json({ error: "bad_request", message: detail }, 400);
+    return errorResponse(err);
   }
 };
 

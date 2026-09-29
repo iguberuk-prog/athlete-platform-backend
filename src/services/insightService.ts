@@ -12,6 +12,7 @@ import { buildRecoveryPlan, type RecoveryPlan } from "../domain/recovery.js";
 import { buildTrends, type TrendSummary } from "../domain/trends.js";
 import { buildGroceryList, type GroceryList } from "../domain/grocery.js";
 import { buildReminders, type Reminder, type ReminderPrefs } from "../domain/reminders.js";
+import { buildProgram, type Program } from "../domain/program.js";
 
 export type Found<T> = { ok: true; value: T } | { ok: false; code: "not_found" };
 
@@ -66,5 +67,11 @@ export class InsightService {
     const p = await this.load(ownerId, id);
     if (!p) return { ok: false, code: "not_found" };
     return { ok: true, value: buildReminders(p, opts) };
+  }
+
+  async program(ownerId: string, id: string): Promise<Found<Program>> {
+    const p = await this.load(ownerId, id);
+    if (!p) return { ok: false, code: "not_found" };
+    return { ok: true, value: buildProgram(p) };
   }
 }

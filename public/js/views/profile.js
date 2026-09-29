@@ -1,8 +1,9 @@
-// Profile: 3-step onboarding for new athletes, and the full edit screen.
+// Profile: 4-step onboarding (food safety first), and the full edit screen.
 
 import { $, $$, esc, msg, avatar, kgToLb, lbToKg, toast } from "../ui.js";
 import { api, errText } from "../api.js";
 import { state, active, isParent, loadProfiles, setActive, go, render as rerender, syncReminders } from "../app.js";
+import { ageFromDob, programFor } from "../programs.js";
 
 export const SPORTS = {
   soccer: { label: "Soccer", code: "SOC", positions: [["goalkeeper", "Goalkeeper"], ["defender", "Defender"], ["fullback", "Fullback"], ["midfielder", "Midfielder"], ["winger", "Winger"], ["forward", "Forward"]] },
@@ -18,36 +19,100 @@ export const SPORTS = {
   tennis: { label: "Tennis", code: "TEN", positions: [["singles", "Singles"], ["doubles", "Doubles"]] },
   other: { label: "Other", code: "GEN", positions: [["general", "General"]] },
 };
-
-const ALLERGENS = [["peanut", "Peanut"], ["tree_nut", "Tree nut"], ["milk", "Milk"], ["egg", "Egg"], ["wheat", "Wheat"], ["gluten", "Gluten"], ["soy", "Soy"], ["fish", "Fish"], ["shellfish", "Shellfish"], ["sesame", "Sesame"]];
-const DIETS = [["vegetarian", "Vegetarian"], ["vegan", "Vegan"], ["pescatarian", "Pescatarian"], ["halal", "Halal"], ["kosher", "Kosher"], ["dairy_free", "Dairy-free"], ["gluten_free", "Gluten-free"], ["nut_free", "Nut-free"]];
-const INTOL = [["lactose", "Lactose"], ["gluten", "Gluten"], ["fructose", "Fructose"], ["caffeine", "Caffeine"]];
+// ---------------------------------------------------------------------------
+// Food-safety interview options
+// ---------------------------------------------------------------------------
+const ALLERGENS = [["peanut", "Peanut"], ["tree_nut", "Tree nuts"], ["milk", "Milk / dairy"], ["egg", "Egg"], ["wheat", "Wheat"], ["gluten", "Gluten"], ["soy", "Soy"], ["fish", "Fish"], ["shellfish", "Shellfish"], ["sesame", "Sesame"]];
+const MEDICAL = [["celiac", "Celiac disease"], ["type1_diabetes", "Type 1 diabetes"], ["sensitive_stomach", "Sensitive stomach before games"], ["low_fodmap", "IBS / low-FODMAP"]];
+const DIETS = [["vegetarian", "Vegetarian"], ["vegan", "Vegan"], ["pescatarian", "Pescatarian"], ["halal", "Halal"], ["kosher", "Kosher"], ["no_pork", "No pork"], ["no_red_meat", "No red meat"], ["dairy_free", "Dairy-free"], ["gluten_free", "Gluten-free"], ["nut_free", "Nut-free"]];
+const INTOL = [["lactose", "Lactose"], ["gluten", "Gluten sensitivity"], ["fructose", "Fructose"], ["caffeine", "Caffeine"]];
+const LABEL = Object.fromEntries([...ALLERGENS, ...MEDICAL, ...DIETS, ...INTOL.map(([k, v]) => ["i:" + k, v])]);
+const STEP_TITLES = ["", "Food safety", "About the athlete", "Body and routine", "Review and confirm"];
+const STEPS = 4;
 
 let pendingAvatar = null;
 let step = 1;
+let isNew = true;
+/** Allergy interview state: answer + per-allergen detail. Keys: allergen id, or "other:<name>". */
+let fs = { answer: null, detail: {} };
 
-const chipset = (name, opts, selected = []) =>
+const chipset = (name, opts, selected = [], act = "") =>
   `<div class="chips" id="${name}">${opts.map(([v, l]) =>
-    `<label class="chip"><input type="checkbox" value="${v}" ${selected.includes(v) ? "checked" : ""}>${esc(l)}</label>`).join("")}</div>`;
+    `<label class="chip"><input type="checkbox" value="${v}" ${selected.includes(v) ? "checked" : ""} ${act ? `data-act="${act}"` : ""}>${esc(l)}</label>`).join("")}</div>`;
 const checked = (id) => $$(`#${id} input:checked`).map((c) => c.value);
 const val = (id) => ($("#" + id)?.value ?? "").trim();
+const who = () => (isParent() ? "your athlete" : "you");
+const whoCap = () => (isParent() ? "Your athlete" : "You");
 
 function randomCode(n = 5) {
   const c = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   return Array.from({ length: n }, () => c[Math.floor(Math.random() * c.length)]).join("");
 }
 
-function fields(p) {
-  const id = p?.identity || {}, sp = p?.sport || {}, an = p?.anthropometrics || {}, n = p?.nutrition || {};
-  const rt = p?.routine || {}, tr = p?.training || {}, ct = p?.contact || {};
-  const sport = sp.primarySport || "soccer";
-  const inches = an.heightCm ? Math.round(an.heightCm / 2.54) : 69;
-  const lb = an.bodyMassKg ? kgToLb(an.bodyMassKg) : "";
-  const allergies = (n.allergies || []).map((a) => a.allergen);
-  const severe = (n.allergies || []).filter((a) => a.severity === "severe").map((a) => a.allergen);
+function otherNames() {
+  return val("otherAllergy").split(",").map((s) => s.trim()).filter(Boolean);
+}
+function allergyKeys() {
+  return [...checked("allergies"), ...otherNames().map((n) => "other:" + n.toLowerCase())];
+}
+function detailFor(key) {
+  return (fs.detail[key] ||= { severity: "moderate", anaphylaxis: false, epinephrine: false, cross: false });
+}
 
-  const s1 = `
-    <section data-step="1">
+// ---------------------------------------------------------------------------
+// Sections
+// ---------------------------------------------------------------------------
+function foodSection(p) {
+  const n = p?.nutrition || {};
+  const listed = (n.allergies || []).filter((a) => a.allergen !== "other").map((a) => a.allergen);
+  const others = (n.allergies || []).filter((a) => a.allergen === "other").map((a) => a.note).filter(Boolean);
+  return `
+    <section data-step="1" id="food">
+      <div class="qblock">
+        <div class="q">${isParent() ? "Does your athlete have any food allergies?" : "Do you have any food allergies?"}</div>
+        <div class="seg" id="hasAllergy">
+          <button type="button" data-act="allergyAnswer" data-v="no" class="${fs.answer === "no" ? "on" : ""}">No allergies</button>
+          <button type="button" data-act="allergyAnswer" data-v="yes" class="${fs.answer === "yes" ? "on" : ""}">Yes</button>
+        </div>
+        <div id="allergyBox" ${fs.answer === "yes" ? "" : "hidden"}>
+          <label class="f">Which ones? Pick all that apply.</label>
+          ${chipset("allergies", ALLERGENS, listed, "allergyPick")}
+          <label class="f" for="otherAllergy">Anything else? <span class="dim">(comma-separated, e.g. kiwi, mustard)</span></label>
+          <input class="input" id="otherAllergy" value="${esc(others.join(", "))}" autocomplete="off">
+          <div id="allergyDetails"></div>
+        </div>
+      </div>
+
+      <div class="qblock">
+        <div class="q">Any medical diet?</div>
+        <p class="hint" style="margin-top:0">Private. Only used to filter food. Coaches never see this, except celiac shown as "gluten (strict)".</p>
+        ${chipset("medical", MEDICAL, n.medicalDiets || [])}
+      </div>
+
+      <div class="qblock">
+        <div class="q">Religious or lifestyle diet?</div>
+        ${chipset("diets", DIETS, n.dietaryRestrictions || [])}
+      </div>
+
+      <div class="qblock">
+        <div class="q">Any intolerances?</div>
+        <p class="hint" style="margin-top:0">Foods that cause discomfort but aren't allergies.</p>
+        ${chipset("intol", INTOL, n.intolerances || [])}
+      </div>
+
+      <div class="qblock">
+        <div class="q">Foods ${who()} won't eat?</div>
+        <input class="input" id="dislikes" placeholder="e.g. fish, eggs, mushrooms" value="${esc((n.dislikes || []).join(", "))}">
+        <div class="hint">We leave these out of every plan and grocery list.</div>
+      </div>
+    </section>`;
+}
+
+function aboutSection(p) {
+  const id = p?.identity || {}, sp = p?.sport || {};
+  const sport = sp.primarySport || "soccer";
+  return `
+    <section data-step="2">
       <div class="photopick">
         <span id="avatarPreview">${avatar(p, "xl")}</span>
         <div>
@@ -59,14 +124,15 @@ function fields(p) {
       <label class="f" for="fullName">Full name</label>
       <input class="input" id="fullName" autocomplete="name" value="${esc(id.fullName || "")}" required>
       <div class="row2">
-        <div><label class="f" for="sport">Sport</label>
-          <select class="input" id="sport">${Object.entries(SPORTS).map(([k, v]) => `<option value="${k}" ${k === sport ? "selected" : ""}>${v.label}</option>`).join("")}</select></div>
-        <div><label class="f" for="position">Position</label><select class="input" id="position"></select></div>
-      </div>
-      <div class="row2">
         <div><label class="f" for="dob">Date of birth</label><input class="input" id="dob" type="date" value="${esc(id.dateOfBirth || "")}"></div>
         <div><label class="f" for="sex">Sex</label><select class="input" id="sex">
           <option value="male" ${id.sex === "male" ? "selected" : ""}>Male</option><option value="female" ${id.sex === "female" ? "selected" : ""}>Female</option></select></div>
+      </div>
+      <div id="programPreview"></div>
+      <div class="row2">
+        <div><label class="f" for="sport">Sport</label>
+          <select class="input" id="sport">${Object.entries(SPORTS).map(([k, v]) => `<option value="${k}" ${k === sport ? "selected" : ""}>${v.label}</option>`).join("")}</select></div>
+        <div><label class="f" for="position">Position</label><select class="input" id="position"></select></div>
       </div>
       <div class="row2">
         <div><label class="f" for="level">Level</label><select class="input" id="level">
@@ -77,41 +143,38 @@ function fields(p) {
       <label class="f" for="club">Team or school <span class="dim">(optional)</span></label>
       <input class="input" id="club" value="${esc(id.clubTeam || id.school || "")}">
     </section>`;
+}
 
-  const s2 = `
-    <section data-step="2">
+function bodySection(p) {
+  const an = p?.anthropometrics || {}, rt = p?.routine || {}, tr = p?.training || {};
+  const inches = an.heightCm ? Math.round(an.heightCm / 2.54) : 66;
+  return `
+    <section data-step="3">
       <div class="row2">
         <div><label class="f">Height</label>
           <div class="row2"><input class="input" id="heightFt" inputmode="numeric" aria-label="Feet" value="${Math.floor(inches / 12)}"><input class="input" id="heightIn" inputmode="numeric" aria-label="Inches" value="${inches % 12}"></div>
           <div class="hint">feet and inches</div></div>
-        <div><label class="f" for="weight">Weight (lb)</label><input class="input" id="weight" inputmode="decimal" value="${lb}"><div class="hint">Plans scale to body weight</div></div>
+        <div><label class="f" for="weight">Weight (lb)</label><input class="input" id="weight" inputmode="decimal" value="${an.bodyMassKg ? kgToLb(an.bodyMassKg) : ""}"><div class="hint">Plans scale to body weight</div></div>
       </div>
       <div class="row3">
         <div><label class="f" for="wake">Wake up</label><input class="input" id="wake" type="time" value="${rt.wakeTime || "07:00"}"></div>
-        <div><label class="f" for="bed">Bedtime</label><input class="input" id="bed" type="time" value="${rt.bedTime || "22:30"}"></div>
+        <div><label class="f" for="bed">Bedtime</label><input class="input" id="bed" type="time" value="${rt.bedTime || "22:00"}"></div>
         <div><label class="f" for="practice">Practice</label><input class="input" id="practice" type="time" value="${rt.usualPracticeTime || "17:00"}"></div>
       </div>
-      <div class="hint">Your reminders are timed from these.</div>
+      <div class="hint">Reminders and sleep targets are timed from these.</div>
       <div class="row2">
-        <div><label class="f" for="days">Practices per week</label><input class="input" id="days" inputmode="numeric" value="${tr.trainingDaysPerWeek ?? 4}"></div>
-        <div><label class="f" for="mins">Practice length (min)</label><input class="input" id="mins" inputmode="numeric" value="${tr.avgSessionMinutes ?? 90}"></div>
+        <div><label class="f" for="days">Practices per week</label><input class="input" id="days" inputmode="numeric" value="${tr.trainingDaysPerWeek ?? 3}"></div>
+        <div><label class="f" for="mins">Practice length (min)</label><input class="input" id="mins" inputmode="numeric" value="${tr.avgSessionMinutes ?? 75}"></div>
       </div>
     </section>`;
+}
 
-  const s3 = `
-    <section data-step="3">
-      <label class="f">Food allergies</label>
-      ${chipset("allergies", ALLERGENS, allergies)}
-      <label class="f">Any of those severe (EpiPen-level)?</label>
-      ${chipset("severe", ALLERGENS, severe)}
-      <div class="hint">We never suggest a food that contains an allergen you pick. Always double-check labels.</div>
-      <label class="f">Diet</label>
-      ${chipset("diets", DIETS, n.dietaryRestrictions || [])}
-      <label class="f">Intolerances</label>
-      ${chipset("intol", INTOL, n.intolerances || [])}
-      <label class="f" for="dislikes">Foods you won't eat <span class="dim">(optional)</span></label>
-      <input class="input" id="dislikes" placeholder="e.g. mushrooms, tuna" value="${esc((n.dislikes || []).join(", "))}">
-      <h3 style="margin-top:22px">Parent and emergency contact</h3>
+function reviewSection(p) {
+  const ct = p?.contact || {};
+  return `
+    <section data-step="4">
+      <div id="reviewBox"></div>
+      <h3 style="margin-top:20px">Parent and emergency contact</h3>
       <div class="row2">
         <div><label class="f" for="parEmail">Parent email</label><input class="input" id="parEmail" type="email" inputmode="email" value="${esc(ct.parentEmail || "")}"></div>
         <div><label class="f" for="parPhone">Parent phone</label><input class="input" id="parPhone" type="tel" value="${esc(ct.parentPhone || "")}"></div>
@@ -120,8 +183,82 @@ function fields(p) {
         <div><label class="f" for="emName">Emergency contact</label><input class="input" id="emName" value="${esc(ct.emergencyContact?.name || "")}"></div>
         <div><label class="f" for="emPhone">Their phone</label><input class="input" id="emPhone" type="tel" value="${esc(ct.emergencyContact?.phone || "")}"></div>
       </div>
+      <label class="check confirm"><input type="checkbox" id="confirmSafety"><span><b>This food-safety information is complete and correct.</b> ${whoCap()} will only see foods that fit it. I'll update it if anything changes.</span></label>
     </section>`;
-  return { s1, s2, s3 };
+}
+
+// ---------------------------------------------------------------------------
+// Dynamic pieces
+// ---------------------------------------------------------------------------
+function renderAllergyDetails() {
+  const box = $("#allergyDetails");
+  if (!box) return;
+  const keys = allergyKeys();
+  box.innerHTML = keys.length ? `<label class="f">Tell us about each one</label>` + keys.map((k) => {
+    const d = detailFor(k);
+    const name = k.startsWith("other:") ? k.slice(6) : LABEL[k] || k;
+    return `<div class="allergyRow" data-key="${esc(k)}">
+      <div class="rowtitle">${esc(name)}</div>
+      <div class="seg sevseg" role="radiogroup" aria-label="How severe">${["mild", "moderate", "severe"].map((s) =>
+        `<button type="button" data-act="allergySev" data-key="${esc(k)}" data-v="${s}" class="${d.severity === s ? "on" : ""}">${s === "severe" ? "Severe" : s === "mild" ? "Mild" : "Moderate"}</button>`).join("")}</div>
+      <label class="check"><input type="checkbox" data-act="allergyFlag" data-key="${esc(k)}" data-f="anaphylaxis" ${d.anaphylaxis ? "checked" : ""}><span>Has had anaphylaxis (trouble breathing, swelling, needed emergency care)</span></label>
+      <label class="check"><input type="checkbox" data-act="allergyFlag" data-key="${esc(k)}" data-f="epinephrine" ${d.epinephrine ? "checked" : ""}><span>Carries an EpiPen or other epinephrine auto-injector</span></label>
+      <label class="check"><input type="checkbox" data-act="allergyFlag" data-key="${esc(k)}" data-f="cross" ${d.cross || d.severity === "severe" ? "checked" : ""}><span>Also avoid "may contain" and shared-equipment foods</span></label>
+    </div>`;
+  }).join("") : "";
+}
+
+function renderProgramPreview() {
+  const el = $("#programPreview");
+  if (!el) return;
+  const age = ageFromDob(val("dob"));
+  const prog = programFor(age);
+  if (!prog) { el.innerHTML = ""; return; }
+  const young = age < 13 && state.user?.role === "athlete";
+  el.innerHTML = `<div class="progcard">
+    <div class="eyebrow">${esc(prog.name)} program · ages ${esc(prog.ages)}</div>
+    <div class="rowsub">${esc(prog.tagline)}</div>
+    ${young ? `<div class="msg err" style="margin-top:10px">Players under 13 need a parent account. Ask a parent to sign up as a parent and add you.</div>` : ""}
+  </div>`;
+}
+
+function renderReview() {
+  const el = $("#reviewBox");
+  if (!el) return;
+  const keys = allergyKeys();
+  const rows = [];
+  if (fs.answer === "no" && !keys.length) rows.push(["Allergies", "None"]);
+  for (const k of keys) {
+    const d = detailFor(k);
+    const name = k.startsWith("other:") ? k.slice(6) : LABEL[k] || k;
+    const bits = [d.severity];
+    if (d.anaphylaxis) bits.push("anaphylaxis history");
+    if (d.epinephrine) bits.push("carries EpiPen");
+    if (d.cross || d.severity === "severe") bits.push("avoid may-contain");
+    rows.push(["Allergy", `${name} (${bits.join(", ")})`]);
+  }
+  const med = checked("medical").map((k) => LABEL[k]);
+  const diets = checked("diets").map((k) => LABEL[k]);
+  const intol = checked("intol").map((k) => LABEL["i:" + k]);
+  const dis = val("dislikes");
+  if (med.length) rows.push(["Medical diet", med.join(", ")]);
+  if (diets.length) rows.push(["Diet", diets.join(", ")]);
+  if (intol.length) rows.push(["Intolerances", intol.join(", ")]);
+  if (dis) rows.push(["Won't eat", dis]);
+  if (!rows.length) rows.push(["Food safety", "No restrictions"]);
+  const epi = keys.some((k) => detailFor(k).epinephrine || detailFor(k).anaphylaxis);
+  const t1d = checked("medical").includes("type1_diabetes");
+  const age = ageFromDob(val("dob"));
+  const prog = programFor(age);
+  el.innerHTML = `
+    <div class="card tight" style="background:var(--bg2)">
+      <h3>Food safety</h3>
+      <ul class="list">${rows.map(([a, b]) => `<li><div style="flex:1"><div class="rowsub">${esc(a)}</div><div class="rowtitle">${esc(b)}</div></div></li>`).join("")}</ul>
+      ${epi ? `<div class="warnbox" style="margin-top:10px">We'll remind ${who()} to pack the EpiPen for every game, and flag it for the coach.</div>` : ""}
+      ${t1d ? `<div class="warnbox">Type 1 diabetes: our carb timing is general guidance. Build the game-day plan with ${isParent() ? "your athlete's" : "your"} diabetes care team.</div>` : ""}
+      <p class="hint">Every plan, reminder and grocery list is filtered against this list. Packaged foods can change, so always read labels.</p>
+    </div>
+    ${prog ? `<div class="card tight" style="background:var(--bg2)"><h3>Program</h3><div class="rowtitle">${esc(prog.name)} · ages ${esc(prog.ages)}</div><div class="rowsub">${esc(prog.tagline)}</div></div>` : ""}`;
 }
 
 function fillPositions(selected) {
@@ -133,28 +270,41 @@ function showStep(n) {
   step = n;
   $$("section[data-step]").forEach((s) => (s.hidden = Number(s.dataset.step) !== n));
   $$(".steps i").forEach((b, i) => b.classList.toggle("on", i < n));
-  $("#stepTitle").textContent = ["", "The basics", "Body and routine", "Food safety"][n];
+  $("#stepTitle").textContent = STEP_TITLES[n];
   $("#stepNum").textContent = n;
   $("#prevBtn").hidden = n === 1;
-  $("#nextBtn").textContent = n === 3 ? "Finish" : "Next";
+  $("#nextBtn").textContent = n === STEPS ? "Save and finish" : "Next";
+  if ($("#stepSub")) $("#stepSub").hidden = n !== 1;
+  if (n === 4) renderReview();
   window.scrollTo(0, 0);
 }
 
+// ---------------------------------------------------------------------------
+// Render
+// ---------------------------------------------------------------------------
 export async function render(el, ctx) {
-  const isNew = ctx.sub === "new" || !ctx.profile;
+  isNew = ctx.sub === "new" || !ctx.profile;
   const p = isNew ? null : ctx.profile;
   pendingAvatar = null;
-  const f = fields(p);
+  fs = { answer: null, detail: {} };
+  if (p) {
+    const al = p.nutrition?.allergies || [];
+    fs.answer = al.length ? "yes" : p.nutrition?.safetyConfirmedAt ? "no" : null;
+    for (const a of al) {
+      const k = a.allergen === "other" ? "other:" + String(a.note || "").toLowerCase() : a.allergen;
+      fs.detail[k] = { severity: a.severity || "moderate", anaphylaxis: !!a.anaphylaxis, epinephrine: !!a.epinephrine, cross: !!a.avoidCrossContact };
+    }
+  }
 
   if (isNew) {
     const first = !state.profiles.length;
     el.innerHTML = `
-      <div class="steps" aria-hidden="true"><i class="on"></i><i></i><i></i></div>
+      <div class="steps" aria-hidden="true">${"<i></i>".repeat(STEPS)}</div>
       <form class="card" data-submit="saveProfile" novalidate>
-        <div class="eyebrow">Step <span id="stepNum">1</span> of 3</div>
-        <h2 id="stepTitle">The basics</h2>
-        <p class="sub">${first ? (isParent() ? "Set up your first athlete. You can add more later." : "Two minutes, and your plan is ready.") : "Add another athlete to your account."}</p>
-        ${f.s1}${f.s2}${f.s3}
+        <div class="eyebrow">Step <span id="stepNum">1</span> of ${STEPS}</div>
+        <h2 id="stepTitle">Food safety</h2>
+        <p class="sub" id="stepSub">${first ? (isParent() ? "We start with food safety, so nothing we suggest can cause a problem." : "We start with food safety, so nothing we suggest can cause a problem for you.") : "Add another athlete. Food safety first."}</p>
+        ${foodSection(p)}${aboutSection(p)}${bodySection(p)}${reviewSection(p)}
         <div class="actions">
           <button type="button" class="btn ghost" id="prevBtn" data-act="profilePrev">Back</button>
           <button type="button" class="btn primary" id="nextBtn" data-act="profileNext">Next</button>
@@ -164,11 +314,16 @@ export async function render(el, ctx) {
     fillPositions();
     showStep(1);
   } else {
+    const unconfirmed = !p.nutrition?.safetyConfirmedAt;
     el.innerHTML = `
+      ${unconfirmed ? `<div class="warnbox">Please review the food-safety questions below and confirm them at the bottom.</div>` : ""}
       <form class="card" data-submit="saveProfile" novalidate>
         <h2>${esc(p.identity.fullName)}</h2>
         <p class="sub">Player ID ${esc(p.identity.playerCode || "")}</p>
-        ${f.s1}<h3 style="margin-top:22px">Body and routine</h3>${f.s2}<h3 style="margin-top:22px">Food safety</h3>${f.s3}
+        <h3>Food safety</h3>${foodSection(p)}
+        <h3 style="margin-top:22px">About</h3>${aboutSection(p)}
+        <h3 style="margin-top:22px">Body and routine</h3>${bodySection(p)}
+        <h3 style="margin-top:22px">Review</h3>${reviewSection(p)}
         <div class="actions"><button class="btn primary block" type="submit">Save changes</button></div>
         <div id="out"></div>
       </form>
@@ -178,9 +333,25 @@ export async function render(el, ctx) {
         <button class="btn danger block" data-act="deleteProfile">Delete ${esc(p.identity.fullName.split(" ")[0])}'s profile</button>
       </div>`;
     fillPositions(p.sport.positions?.[0]);
+    renderReview();
+    if (location.hash.includes("food")) setTimeout(() => $("#food")?.scrollIntoView({ block: "start" }), 50);
   }
+  renderAllergyDetails();
+  renderProgramPreview();
   $("#sport").addEventListener("change", () => fillPositions());
   $("#photoInput").addEventListener("change", onPhoto);
+  $("#dob").addEventListener("input", () => {
+    renderProgramPreview();
+    // New profiles: default the bedtime to the age's sleep need, unless it was changed by hand.
+    const bed = $("#bed");
+    if (isNew && bed && !bed.dataset.touched) {
+      const age = ageFromDob(val("dob"));
+      if (age !== undefined) bed.value = age <= 9 ? "20:00" : age <= 12 ? "20:30" : age <= 18 ? "22:00" : "22:30";
+    }
+  });
+  $("#bed").addEventListener("input", (e) => (e.target.dataset.touched = "1"));
+  $("#otherAllergy").addEventListener("input", () => { renderAllergyDetails(); if (!isNew) renderReview(); });
+  el.addEventListener("change", () => { if (!isNew || step === 4) renderReview(); });
 }
 
 function onPhoto(e) {
@@ -204,23 +375,33 @@ function onPhoto(e) {
 
 function stepErrors(n) {
   if (n === 1) {
-    if (!val("fullName")) return "Enter the athlete's name.";
-    if (!val("dob")) return "Enter a date of birth.";
+    if (!fs.answer) return `Please answer: ${isParent() ? "does your athlete" : "do you"} have any food allergies?`;
+    if (fs.answer === "yes" && !allergyKeys().length) return "Pick the allergy, or type it under \"Anything else?\".";
   }
   if (n === 2) {
+    if (!val("fullName")) return "Enter the athlete's name.";
+    const age = ageFromDob(val("dob"));
+    if (age === undefined) return "Enter a date of birth. It sets the age program.";
+    if (age < 6) return "The app is built for athletes 6 and older.";
+    if (age < 13 && state.user?.role === "athlete") return "Players under 13 need a parent account. Ask a parent to sign up as a parent and add you.";
+  }
+  if (n === 3) {
     const lb = Number(val("weight"));
-    if (!lb || lb < 45 || lb > 350) return "Enter weight in pounds (45-350).";
+    if (!lb || lb < 40 || lb > 350) return "Enter weight in pounds (40-350).";
     const ft = Number(val("heightFt")), inch = Number(val("heightIn"));
     if (!(ft >= 3 && ft <= 7) || !(inch >= 0 && inch <= 11)) return "Enter height as feet (3-7) and inches (0-11).";
   }
+  if (n === 4 && !$("#confirmSafety").checked) return "Please confirm the food-safety information is complete and correct.";
   return null;
 }
 
 function payload(existing) {
   const sport = val("sport");
-  const allergies = checked("allergies");
-  const severe = checked("severe");
-  for (const s of severe) if (!allergies.includes(s)) allergies.push(s);
+  const allergies = allergyKeys().map((k) => {
+    const d = detailFor(k);
+    const base = k.startsWith("other:") ? { allergen: "other", note: k.slice(6) } : { allergen: k };
+    return { ...base, severity: d.severity, anaphylaxis: d.anaphylaxis || undefined, epinephrine: d.epinephrine || undefined, avoidCrossContact: d.cross || d.severity === "severe" || undefined };
+  });
   const emName = val("emName"), emPhone = val("emPhone");
   const contact = { ...(existing?.contact || {}) };
   contact.parentEmail = val("parEmail") || undefined;
@@ -249,14 +430,16 @@ function payload(existing) {
       bodyMassKg: lbToKg(Number(val("weight"))),
     },
     training: { ...(base.training || {}), trainingDaysPerWeek: Number(val("days")) || undefined, avgSessionMinutes: Number(val("mins")) || undefined },
-    routine: { wakeTime: val("wake") || "07:00", bedTime: val("bed") || "22:30", usualPracticeTime: val("practice") || "17:00" },
+    routine: { wakeTime: val("wake") || "07:00", bedTime: val("bed") || "22:00", usualPracticeTime: val("practice") || "17:00" },
     contact,
     nutrition: {
       ...(base.nutrition || {}),
-      allergies: allergies.map((a) => ({ allergen: a, severity: severe.includes(a) ? "severe" : "moderate" })),
+      allergies,
+      medicalDiets: checked("medical"),
       dietaryRestrictions: checked("diets"),
       intolerances: checked("intol"),
       dislikes: val("dislikes").split(",").map((s) => s.trim()).filter(Boolean),
+      safetyConfirmedAt: new Date().toISOString(),
     },
     schedule: base.schedule || { events: [] },
   };
@@ -266,19 +449,42 @@ const out = (kind, text) => { $("#out").innerHTML = msg(kind, text); $("#out").s
 
 export const actions = {
   pickPhoto: () => $("#photoInput").click(),
+  allergyAnswer(btn) {
+    fs.answer = btn.dataset.v;
+    btn.parentElement.querySelectorAll("button").forEach((b) => b.classList.toggle("on", b === btn));
+    $("#allergyBox").hidden = fs.answer !== "yes";
+    if (fs.answer === "no") { $$("#allergies input").forEach((c) => (c.checked = false)); $("#otherAllergy").value = ""; }
+    renderAllergyDetails();
+  },
+  allergyPick() { setTimeout(renderAllergyDetails); },
+  allergySev(btn) {
+    const d = detailFor(btn.dataset.key);
+    d.severity = btn.dataset.v;
+    if (d.severity === "severe") d.cross = true;
+    renderAllergyDetails();
+    if (!isNew) renderReview();
+  },
+  allergyFlag(input) {
+    setTimeout(() => {
+      const d = detailFor(input.dataset.key);
+      d[input.dataset.f] = input.checked;
+      if (input.dataset.f === "anaphylaxis" && input.checked) { d.severity = "severe"; d.cross = true; renderAllergyDetails(); }
+      if (!isNew) renderReview();
+    });
+  },
   profilePrev: () => showStep(Math.max(1, step - 1)),
-  profileNext: async (el) => {
+  async profileNext(el) {
     const err = stepErrors(step);
     if (err) return out("err", err);
     $("#out").innerHTML = "";
-    if (step < 3) { showStep(step + 1); return; }
+    if (step < STEPS) { showStep(step + 1); return; }
     await actions.saveProfile(el.closest("form"));
   },
 
   async saveProfile(form) {
-    if (state.route.sub === "new" && step < 3) return actions.profileNext(form.querySelector("#nextBtn"));
-    const editing = !(state.route.sub === "new") && active();
-    for (const n of [1, 2]) { const e = stepErrors(n); if (e) return out("err", e); }
+    if (isNew && step < STEPS) return actions.profileNext(form.querySelector("#nextBtn"));
+    for (const n of [1, 2, 3, 4]) { const e = stepErrors(n); if (e) return out("err", e); }
+    const editing = !isNew && active();
     const body = payload(editing ? active() : null);
     const btn = form.querySelector(".btn.primary"); if (btn) btn.disabled = true;
     const r = editing
@@ -290,12 +496,12 @@ export const actions = {
     setActive(r.data.id);
     toast(editing ? "Saved" : "You're all set");
     syncReminders();
-    go(editing ? "#/more" : "#/today");
+    go(editing ? "#/more" : "#/program?welcome=1");
   },
 
   async deleteProfile() {
     const p = active();
-    if (!p || !confirmDelete(p.identity.fullName)) return;
+    if (!p || !window.confirm(`Delete ${p.identity.fullName}'s profile and all of their data? This can't be undone.`)) return;
     const r = await api(`/api/profiles/${p.id}`, { method: "DELETE" });
     if (!r.ok) return toast(errText(r));
     await loadProfiles();
@@ -304,8 +510,3 @@ export const actions = {
     rerender();
   },
 };
-
-function confirmDelete(name) {
-  // The app avoids blocking dialogs elsewhere; destructive actions are the exception.
-  return window.confirm(`Delete ${name}'s profile and all of their data? This can't be undone.`);
-}

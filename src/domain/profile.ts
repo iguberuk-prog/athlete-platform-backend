@@ -40,6 +40,7 @@ import type {
   Goal,
   IllnessStatus,
   Intolerance,
+  MedicalDietId,
   MealPattern,
   NapFrequency,
   PreferredDiet,
@@ -69,8 +70,14 @@ export interface EmergencyContact {
 export interface AllergyEntry {
   allergen: Allergen;
   severity: AllergySeverity;
-  /** Required when allergen === "other". */
+  /** Required when allergen === "other" (e.g. "kiwi"). Matched against food names. */
   note?: string;
+  /** Has had anaphylaxis (a severe whole-body reaction). */
+  anaphylaxis?: boolean;
+  /** Carries an epinephrine auto-injector (EpiPen). */
+  epinephrine?: boolean;
+  /** Also avoid "may contain" / shared-equipment foods. */
+  avoidCrossContact?: boolean;
 }
 
 export interface InjuryRecord {
@@ -150,6 +157,10 @@ export interface Nutrition {
   caffeineMgPerDay?: number;
   /** Free-text supplement names the athlete uses. */
   supplements?: string[];
+  /** Medical diets: celiac, type 1 diabetes, sensitive stomach, low-FODMAP. Private health data. */
+  medicalDiets?: MedicalDietId[];
+  /** When the athlete or parent confirmed the food-safety summary (ISO datetime). */
+  safetyConfirmedAt?: string;
 }
 
 export interface RecoveryProfile {

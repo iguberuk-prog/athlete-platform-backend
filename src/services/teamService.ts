@@ -81,7 +81,10 @@ export class TeamService {
         soreness: last?.sorenessLevel ?? null,
         sleepHours: last?.sleepHoursLastNight ?? null,
         nextMatch: nm ? { date: eventDate(nm), time: eventTime(nm) } : null,
-        allergies: (p.nutrition.allergies || []).map((a) => a.allergen),
+        allergies: [
+          ...(p.nutrition.allergies || []).map((a) => (a.allergen === "other" ? a.note || "other" : a.allergen) + (a.anaphylaxis || a.epinephrine ? " (severe, EpiPen)" : "")),
+          ...((p.nutrition.medicalDiets || []).includes("celiac") ? ["gluten (strict)"] : []),
+        ],
         diets: p.nutrition.dietaryRestrictions || [],
         injuryFlag: (p.health?.currentInjuries || []).length > 0,
         joinedAt: m.joinedAt,

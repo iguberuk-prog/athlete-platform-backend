@@ -6,6 +6,7 @@
  *   /api/profiles/:id/trends     ?date=YYYY-MM-DD&days=28
  *   /api/profiles/:id/grocery    ?from=YYYY-MM-DD&days=7
  *   /api/profiles/:id/reminders  ?from=YYYY-MM-DD&days=7&now=...&off=hydrate,sleep
+ *   /api/profiles/:id/program    age program + food-safety summary
  *
  * Clients send their own local date so plans follow the athlete's clock.
  */
@@ -55,6 +56,9 @@ export default async (req: Request, context: Context): Promise<Response> => {
         if (result.ok) return json({ reminders: result.value });
         break;
       }
+      case "program":
+        result = await svc.program(user.id, id);
+        break;
       default:
         return notFound();
     }
@@ -71,5 +75,6 @@ export const config: Config = {
     "/api/profiles/:id/trends",
     "/api/profiles/:id/grocery",
     "/api/profiles/:id/reminders",
+    "/api/profiles/:id/program",
   ],
 };

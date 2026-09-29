@@ -16,7 +16,14 @@ export async function render(el, ctx) {
   list = r.data;
   const done = storeGet(key(p.id, from), {});
   const c = list.dayCounts;
-  const avoid = [...(p.nutrition.allergies || []).map((a) => a.allergen), ...(p.nutrition.dietaryRestrictions || [])].map((x) => x.replace(/_/g, " "));
+  const n = p.nutrition;
+  const avoid = [
+    ...(n.allergies || []).map((a) => (a.allergen === "other" ? a.note || "other" : a.allergen)),
+    ...(n.medicalDiets || []).map((m) => ({ celiac: "celiac", type1_diabetes: "type 1 diabetes", sensitive_stomach: "sensitive stomach", low_fodmap: "low-FODMAP" }[m] || m)),
+    ...(n.dietaryRestrictions || []),
+    ...(n.intolerances || []).map((i) => i + " intolerance"),
+    ...(n.dislikes || []),
+  ].map((x) => String(x).replace(/_/g, " "));
 
   el.innerHTML = `
     <section class="hero">

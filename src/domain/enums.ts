@@ -113,8 +113,14 @@ export const DIETS = [
   "dairy_free",
   "gluten_free",
   "nut_free",
+  "no_pork",
+  "no_red_meat",
 ] as const;
 export type Diet = (typeof DIETS)[number];
+
+// --- Medical diets (health data: private, never shown to coaches except celiac as "gluten, strict")
+export const MEDICAL_DIETS = ["celiac", "type1_diabetes", "sensitive_stomach", "low_fodmap"] as const;
+export type MedicalDietId = (typeof MEDICAL_DIETS)[number];
 
 // --- Preferred diet (single lifestyle choice; "none" allowed) --------------
 export const PREFERRED_DIETS = [
@@ -211,7 +217,7 @@ export const BOUNDS = {
   heightCm: { min: 100, max: 230 },
   bodyMassKg: { min: 20, max: 160 },
   bodyFatPct: { min: 3, max: 50 },
-  age: { min: 8, max: 60 },
+  age: { min: 6, max: 90 },
   yearsPlaying: { min: 0, max: 50 },
   trainingDaysPerWeek: { min: 0, max: 14 },
   avgSessionMinutes: { min: 0, max: 360 },

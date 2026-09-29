@@ -15,6 +15,7 @@ import * as trends from "./views/trends.js";
 import * as grocery from "./views/grocery.js";
 import * as team from "./views/team.js";
 import * as settings from "./views/settings.js";
+import * as program from "./views/program.js";
 
 export const state = {
   user: null,          // { email, role }
@@ -25,12 +26,12 @@ export const state = {
 
 const VIEWS = {
   today, gameday, recovery, checkin, more, schedule, trends, grocery, team,
-  profile, reminders: settings, account: settings,
+  profile, program, reminders: settings, account: settings,
 };
 
 // Views register click handlers by name; buttons carry data-act="name".
 const actions = {};
-for (const v of [auth, profile, today, gameday, recovery, checkin, more, schedule, trends, grocery, team, settings]) {
+for (const v of [auth, profile, today, gameday, recovery, checkin, more, schedule, trends, grocery, team, settings, program]) {
   Object.assign(actions, v.actions || {});
 }
 
@@ -77,7 +78,7 @@ function tabsFor() {
 const TITLES = {
   today: "Today", gameday: "Game Day", recovery: "Recovery", checkin: "Check-in", more: "More",
   schedule: "Schedule", trends: "Trends", grocery: "Grocery list", team: "Team", profile: "Profile",
-  reminders: "Reminders", account: "Account",
+  reminders: "Reminders", account: "Account", program: "My program",
 };
 
 function switcher() {
@@ -110,7 +111,7 @@ export async function render() {
 
   const tabs = needsProfile ? [] : tabsFor();
   const tabNames = tabs.map((t) => t[0]);
-  const showSwitch = ["today", "gameday", "recovery", "checkin", "schedule", "trends", "grocery"].includes(name) ||
+  const showSwitch = ["today", "gameday", "recovery", "checkin", "schedule", "trends", "grocery", "program"].includes(name) ||
     (name === "team" && !isCoach());
   const titleText = name === "profile" && state.route.sub === "new"
     ? (isParent() ? "Add an athlete" : "Set up your profile")

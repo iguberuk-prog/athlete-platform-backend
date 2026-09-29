@@ -17,8 +17,10 @@
 
 import type { AthleteProfile } from "./profile.js";
 import type { DailyCheckIn } from "./checkin.js";
-import { safeFoodSuggestions } from "./plan.js";
 import { gameMorning, to12 } from "./dates.js";
+import { bandForAge, parentVoice, sleepHoursFor } from "./ageBands.js";
+import { effectiveAge } from "./profile.js";
+import { examples, names, pick, safetyContext } from "./foods.js";
 
 export interface TimelineEntry {
   time: string; // HH:MM
@@ -110,9 +112,22 @@ export function buildGameDayTimeline(
   const wake = morning.wake;
   const bed = opts.bedTime || "22:30";
   const kickMin = toMin(opts.kickoff);
-  const carbs = safeFoodSuggestions(profile, "carb");
-  const protein = safeFoodSuggestions(profile, "protein");
   const playsTomorrow = !!opts.playsTomorrow;
+  const age = effectiveAge(profile.identity);
+  const band = bandForAge(age);
+  const young = band.inGame === "water_fruit";
+  const kid = parentVoice(age);
+  const [sleepLo, sleepHi] = sleepHoursFor(age);
+  const c = safetyContext(profile, { gameDay: true });
+  const cEve = safetyContext(profile);
+  const ex = (ids: string[], n = 3, role?: Parameters<typeof pick>[3]) => examples(c, ids, n, role);
+  const list = (ids: string[], n = 4, role?: Parameters<typeof pick>[3]) => names(pick(c, ids, n, role));
+  const MEAL = ["rice", "pasta", "gf_pasta", "potato", "bagel", "toast", "gf_toast", "sweet_potato"];
+  const BREAKFAST = ["oats", "toast", "gf_toast", "bagel", "banana", "berries", "greek_yogurt", "eggs"];
+  const QUICK = ["banana", "toast", "gf_toast", "rice_cakes", "applesauce", "honey", "jam", "sports_drink"];
+  const RECOVER = ["choc_milk", "greek_yogurt", "lf_yogurt", "whey", "plant_shake", "soy_milk", "turkey_sandwich", "rice_bowl", "tofu_bowl"];
+  const PROTEIN = ["chicken", "salmon", "turkey", "eggs", "tofu", "beef", "lentils"];
+  const SLOW = ["greek_yogurt", "cottage", "lf_yogurt", "milk", "lf_milk", "soy_milk"];
 
   const sweat = profile.advanced?.sweatRateLitresPerHour;
   const inGameFluids = sweat
@@ -133,7 +148,7 @@ export function buildGameDayTimeline(
         : morning.lighter
           ? "~500 ml water on waking. Your main meal comes soon, so keep this to a drink or a bite."
           : "~500 ml water on waking; an easy carbohydrate breakfast to start topping up energy.",
-      foods: carbs.slice(0, 3),
+      foods: list(BREAKFAST, 3, "breakfast"),
     },
     {
       time: morning.preMeal,
@@ -143,31 +158,37 @@ export function buildGameDayTimeline(
         : "Main fueling meal (3–4 h before kickoff)",
       detail: morning.lighter
         ? morning.gapMin <= 120
-          ? `About ${r(1 * M)} g easy carbohydrate (1 g/kg): banana, toast or a bagel with honey, or a smoothie. Almost no fat or fibre. Sip fluids.`
-          : `${range(1 * M, 2 * M, "g")} carbohydrate (1–2 g/kg), easy to digest: white rice, bagel or oats with banana and honey. Keep fat and fibre very low.`
-        : `${range(1 * M, 3 * M, "g")} carbohydrate (1–3 g/kg); keep fat/fibre low to avoid GI upset.`,
-      foods: carbs.slice(0, 4),
+          ? `${young ? "A small, easy meal" : `About ${r(1 * M)} g easy carbohydrate (1 g/kg)`}: ${ex(QUICK, 3, "quick_carb")}. Almost no fat or fibre. Sip ${young ? "water" : "fluids"}.`
+          : `${young ? "A lighter, easy meal" : `${range(1 * M, 2 * M, "g")} carbohydrate (1–2 g/kg), easy to digest`}: ${ex(MEAL, 3, "meal_carb")}. Keep fat and fibre very low.`
+        : young
+          ? `A normal-size meal, half the plate carbs: ${ex(MEAL, 3, "meal_carb")}. Keep fat and fibre low.`
+          : `${range(1 * M, 3 * M, "g")} carbohydrate (1–3 g/kg): ${ex(MEAL, 3, "meal_carb")}. Keep fat/fibre low to avoid GI upset.`,
+      foods: list(MEAL, 4, "meal_carb"),
     },
     {
       time: fromMin(snap15(kickMin - 60)),
       phase: "Pre-game top-up",
       title: "Light top-up + hydrate",
-      detail: "Small, fast carbohydrate snack and fluids; finish a warm-up plan.",
-      foods: carbs.filter((f) => ["banana", "honey", "sports drink", "energy gel"].includes(f)),
+      detail: `Small, fast carbohydrate snack: ${ex(["banana", "rice_cakes", "applesauce", "toast", "gf_toast"], 2, "quick_carb")}, plus ${young ? "water" : "fluids"}. Warm up ${band.warmupMin} minutes.`,
+      foods: list(["banana", "rice_cakes", "applesauce", "toast", "gf_toast"], 3, "quick_carb"),
     },
     {
       time: opts.kickoff,
       phase: "Kickoff",
       title: "Start in-game fueling",
-      detail: `30–60 g carbohydrate per hour; ${inGameFluids}; ~0.5–0.7 g sodium per litre of fluid.`,
-      foods: carbs.filter((f) => ["sports drink", "energy gel", "banana"].includes(f)),
+      detail: young
+        ? "Water at every break. A sports drink only if it's hot or play runs over an hour."
+        : `30–60 g carbohydrate per hour; ${inGameFluids}; ~0.5–0.7 g sodium per litre of fluid.`,
+      foods: young ? list(["water"], 1) : list(["sports_drink", "gel", "chews"], 3, "in_game"),
     },
     {
       time: fromMin(snap15(halftimeMin)),
       phase: "Half-time",
       title: "Mid-game energy",
-      detail: "Take a gel and/or sports drink and fluids to keep blood glucose up for the second half.",
-      foods: carbs.filter((f) => ["energy gel", "sports drink", "honey"].includes(f)),
+      detail: young
+        ? `Water and a quick snack: ${ex(["orange", "banana", "grapes"], 2, "halftime")}.`
+        : `Quick carbs to keep energy up for the second half: ${ex(["sports_drink", "gel", "chews", "banana", "orange"], 2, "halftime")}. Plus fluids.`,
+      foods: list(young ? ["orange", "banana", "grapes"] : ["sports_drink", "gel", "chews", "banana"], 3, "halftime"),
     },
     {
       time: fromMin(snap15(fulltimeMin)),
@@ -179,27 +200,31 @@ export function buildGameDayTimeline(
       time: fromMin(snap15(fulltimeMin + 20)),
       phase: "Immediate recovery",
       title: "Recovery feeding (first ~20 min)",
-      detail: `~${r(1.2 * M)} g carbohydrate (1.2 g/kg) + ~40 g protein; rehydrate ~150% of fluid lost, with electrolytes.`,
-      foods: protein.slice(0, 4),
+      detail: young
+        ? `A snack with carbs and protein: ${ex(RECOVER, 2, "recovery")}. Water until no longer thirsty.`
+        : `~${r(1.2 * M)} g carbohydrate (1.2 g/kg) + ~${r(band.perMealProteinPerKg * M)} g protein: ${ex(RECOVER, 2, "recovery")}. Rehydrate ~150% of fluid lost, with electrolytes.`,
+      foods: list(RECOVER, 4, "recovery"),
     },
     {
       time: fromMin(snap15(fulltimeMin + 120)),
       phase: "Evening meal",
       title: "Balanced recovery dinner",
       detail: "A full meal with carbohydrate + protein + vegetables to continue refuelling.",
-      foods: [...carbs.slice(0, 2), ...protein.slice(0, 2)],
+      foods: [...list(MEAL, 2, "meal_carb"), ...list(PROTEIN, 2, "protein")],
     },
   ];
 
   // Night routine.
   const nightItems: string[] = [
     "Wind down: dim screens, keep the room cool and dark.",
-    "Aim for 8–9 hours of sleep — the single biggest recovery lever.",
+    `Aim for ${sleepLo}–${sleepHi} hours of sleep — the single biggest recovery lever.`,
   ];
   if (playsTomorrow) {
     nightItems.unshift(
-      `You play again tomorrow — keep refuelling tonight (target 6–10 g/kg carbohydrate across today) and hydrate well.`,
-      `A slow-digesting protein before bed (e.g. ${protein.find((f) => /yogurt|casein|cottage|milk/i.test(f)) || protein[0] || "a protein snack"}) supports overnight repair.`,
+      young
+        ? `${kid ? "They play" : "You play"} again tomorrow: a good dinner with extra carbs, plenty of water, and an early bedtime.`
+        : `You play again tomorrow — keep refuelling tonight (target 6–10 g/kg carbohydrate across today) and hydrate well.`,
+      `A protein snack before bed (e.g. ${examples(cEve, SLOW, 2, "slow_protein", "a protein snack you tolerate")}) supports overnight repair.`,
     );
   } else {
     nightItems.push("No game tomorrow: a normal balanced evening is fine; prioritise sleep.");
@@ -211,7 +236,7 @@ export function buildGameDayTimeline(
     detail: playsTomorrow
       ? "Tonight sets up tomorrow's performance: top up carbs, hydrate, slow protein, and protect sleep."
       : "Relax and recover; let your body rebuild overnight.",
-    foods: playsTomorrow ? protein.slice(0, 3) : undefined,
+    foods: playsTomorrow ? names(pick(cEve, SLOW, 3, "slow_protein")) : undefined,
   });
   entries.push({ time: bed, phase: "Bed", title: "Lights out", detail: "Target a consistent bedtime for full recovery." });
 
@@ -225,8 +250,7 @@ export function buildGameDayTimeline(
   }
 
   // Day before the match: evening & night prep (its own section).
-  const slowProtein =
-    protein.find((f) => /yogurt|casein|cottage|milk/i.test(f)) || protein[0] || "a slow-digesting protein snack";
+  const slowProtein = examples(cEve, SLOW, 1, "slow_protein", "a protein snack you tolerate");
   const dayBefore: DayBeforeSection = {
     date: prevDate(opts.date),
     title: "Day before — evening & night prep",
@@ -234,8 +258,10 @@ export function buildGameDayTimeline(
       {
         when: "Evening meal",
         title: "Carb-focused dinner",
-        detail: `Make carbohydrate the centre of the plate (aim ${range(6 * M, 8 * M, "g")} across the day, 6–8 g/kg) with lean protein and vegetables; keep heavy fat and fibre moderate so you wake up light.`,
-        foods: [...carbs.slice(0, 2), ...protein.slice(0, 2)],
+        detail: young
+          ? `A normal dinner with a bigger serving of carbs (${examples(cEve, MEAL, 3, "meal_carb")}), some protein and vegetables.`
+          : `Make carbohydrate the centre of the plate (aim ${range(6 * M, 8 * M, "g")} across the day, 6–8 g/kg) with lean protein and vegetables; keep heavy fat and fibre moderate so you wake up light.`,
+        foods: [...names(pick(cEve, MEAL, 2, "meal_carb")), ...names(pick(cEve, PROTEIN, 2, "protein"))],
       },
       {
         when: "Through the evening",
@@ -246,11 +272,11 @@ export function buildGameDayTimeline(
         when: "Before bed",
         title: "Slow protein + wind-down",
         detail: `A slow-digesting protein before bed (${slowProtein}) supports overnight repair. Dim screens, keep the room cool and dark, and set tomorrow's kit out so the morning is calm.`,
-        foods: [slowProtein],
+        foods: names(pick(cEve, SLOW, 1, "slow_protein")),
       },
       {
         when: "Sleep",
-        title: "Protect 8–9 hours",
+        title: `Protect ${sleepLo}–${sleepHi} hours`,
         detail: "Sleep is the single biggest recovery lever. Aim for a consistent bedtime the night before a match — earlier is better than later.",
       },
     ],
@@ -260,7 +286,7 @@ export function buildGameDayTimeline(
   const calendar: CalendarEvent[] = [
     { title: `${profile.identity.fullName} — Match`, start: `${opts.date}T${opts.kickoff}`, durationMin: 110, description: "Match-day fueling plan in the app." },
     { title: "Pre-game meal", start: `${opts.date}T${morning.preMeal}`, durationMin: 45, description: `${range(1 * M, 3 * M, "g")} carbohydrate.` },
-    { title: "Recovery feeding", start: `${opts.date}T${fromMin(snap15(fulltimeMin + 20))}`, durationMin: 30, description: `~${r(1.2 * M)} g carbs + 40 g protein.` },
+    { title: "Recovery feeding", start: `${opts.date}T${fromMin(snap15(fulltimeMin + 20))}`, durationMin: 30, description: young ? "Carbs + protein snack and water." : `~${r(1.2 * M)} g carbs + ${r(band.perMealProteinPerKg * M)} g protein.` },
     { title: "Night-before carb dinner", start: `${dayBefore.date}T18:30`, durationMin: 60, description: `Carb-focused dinner to top up glycogen before match day (aim ${range(6 * M, 8 * M, "g")} carbohydrate across the day).` },
   ];
 

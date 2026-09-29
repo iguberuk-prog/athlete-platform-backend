@@ -18,6 +18,7 @@ import {
   BOUNDS,
   COMPETITION_LEVELS,
   DIETS,
+  MEDICAL_DIETS,
   DOMINANT_FEET,
   EVENT_IMPORTANCE,
   EVENT_TYPES,
@@ -231,6 +232,18 @@ function validateNutrition(errors: ValidationError[], input: ProfileInput): void
   arrayCheck(errors, "nutrition.dietaryRestrictions", n.dietaryRestrictions, true, (v, i) =>
     enumCheck(errors, `nutrition.dietaryRestrictions[${i}]`, v, DIETS, true),
   );
+  if (n.medicalDiets !== undefined)
+    arrayCheck(errors, "nutrition.medicalDiets", n.medicalDiets, false, (v, i) =>
+      enumCheck(errors, `nutrition.medicalDiets[${i}]`, v, MEDICAL_DIETS, true),
+    );
+  if (n.safetyConfirmedAt !== undefined && !isISODate(n.safetyConfirmedAt))
+    errors.push({ path: "nutrition.safetyConfirmedAt", message: "must be an ISO datetime" });
+  (isArray(n.allergies) ? n.allergies : []).forEach((a, i) => {
+    for (const k of ["anaphylaxis", "epinephrine", "avoidCrossContact"] as const) {
+      const v = (a as unknown as Record<string, unknown>)?.[k];
+      if (v !== undefined && !isBool(v)) errors.push({ path: `nutrition.allergies[${i}].${k}`, message: "must be true or false" });
+    }
+  });
   if (
     isArray(n.dietaryRestrictions) &&
     n.dietaryRestrictions.includes("vegan") &&

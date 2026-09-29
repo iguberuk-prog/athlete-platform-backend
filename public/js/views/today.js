@@ -40,12 +40,20 @@ export async function render(el, ctx) {
         <button class="btn primary sm" style="margin-top:10px" data-act="nav" data-to="#/checkin">Check in</button></div></div>`;
 
   const tg = t.targets;
-  const targets = `
+  const plates = tg.mode === "plates";
+  const targets = plates ? `
+    <div class="plate"><div class="rowtitle">The plate today</div><div class="rowsub" style="margin-top:4px">${esc(tg.plate)}</div></div>
+    <div class="targets" style="grid-template-columns:1fr 1fr;margin-top:10px">
+      <div class="tgt"><div class="k">Meals</div><div class="v">3 + 2</div><div class="u">meals + snacks</div></div>
+      <div class="tgt"><div class="k">Water</div><div class="v">${tg.fluidsL} L</div><div class="u">about ${Math.round(tg.fluidsL * 4.2)} cups</div></div>
+    </div>
+    <p class="rowsub" style="margin:10px 0 0">${esc(tg.note)}</p>` : `
     <div class="targets">
       <div class="tgt"><div class="k">Carbs</div><div class="v">${tg.carbsG[0]}-${tg.carbsG[1]}</div><div class="u">grams today</div></div>
       <div class="tgt"><div class="k">Protein</div><div class="v">${tg.proteinG[0]}-${tg.proteinG[1]}</div><div class="u">grams today</div></div>
       <div class="tgt"><div class="k">Fluids</div><div class="v">${tg.fluidsL} L</div><div class="u">about ${Math.round(tg.fluidsL * 33.8)} oz</div></div>
     </div>
+    ${tg.mode === "guide" ? `<p class="rowsub" style="margin:10px 0 0"><b>Plate:</b> ${esc(tg.plate)} Grams are a rough guide during growth spurts.</p>` : ""}
     <p class="rowsub" style="margin:10px 0 0">${esc(tg.note)}</p>`;
 
   const events = t.todaysEvents.length
@@ -60,12 +68,16 @@ export async function render(el, ctx) {
   const tiles = [];
   if (t.dayType === "match" || t.dayType === "match_eve") tiles.push(["gameday", "ball", "Game-day plan", "Hour-by-hour fueling for your game"]);
   if (t.dayType === "recovery" || t.tournament) tiles.push(["recovery", "recover", "Recovery plan", "Day-by-day refuel and rest"]);
+  if (t.safety.epinephrine && (t.dayType === "match" || t.dayType === "training")) tiles.unshift(["program", "heart", "EpiPen in the bag?", "Pack it for every game and practice"]);
+  tiles.push(["program", "user", `${t.program.name} program`, t.program.tagline]);
   tiles.push(["schedule", "calendar", "Schedule", "Add games and practices"]);
 
   el.innerHTML = `
+    ${t.safety.confirmed ? "" : `<button class="tile" data-act="nav" data-to="#/profile/edit?food=1" style="border-color:rgba(255,200,87,.5)"><span class="ic">!</span><span><div class="tt">Confirm food safety</div><div class="ts">Two minutes. Makes sure nothing we suggest causes a problem.</div></span><span class="chev">›</span></button>`}
     <section class="hero">
-      <div class="greet">${greet}, ${esc(t.firstName)}</div>
-      <div class="headline">${esc(t.headline)}</div>
+      <button class="progchip" data-act="nav" data-to="#/program">${esc(t.program.name)} · ${esc(t.program.ages)}</button>
+      <div class="greet">${greet}${t.program.parentVoice ? "" : `, ${esc(t.firstName)}`}</div>
+      <div class="headline">${t.program.parentVoice ? `${esc(t.firstName)}'s ` : ""}${esc(t.program.parentVoice ? t.headline.toLowerCase() : t.headline)}</div>
       <div class="note">${esc(t.focus[0] || "")}</div>
       ${countdown}
     </section>

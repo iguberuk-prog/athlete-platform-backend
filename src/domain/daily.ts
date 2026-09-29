@@ -17,6 +17,9 @@
 import type { AthleteProfile, ScheduledEvent } from "./profile.js";
 import type { DailyCheckIn } from "./checkin.js";
 import { computeReadiness, type Readiness } from "./readiness.js";
+import { bandForAge, parentVoice, sleepHoursFor, type BandId, type TargetsMode } from "./ageBands.js";
+import { effectiveAge } from "./profile.js";
+import { examples, fillText, safetyContext } from "./foods.js";
 import {
   addDays,
   daysBetween,
@@ -26,11 +29,17 @@ import {
   routineOf,
   sortedEvents,
   to12,
+  toMin,
+  fromMin,
 } from "./dates.js";
 
 export type DayType = "match" | "match_eve" | "recovery" | "training" | "rest";
 
 export interface DailyTargets {
+  /** How the app should present targets for this age: plates, a gram guide, or grams. */
+  mode: TargetsMode;
+  /** Plate guidance (always present; the main display for young kids). */
+  plate: string;
   carbsG: [number, number];
   carbsPerKg: [number, number];
   proteinG: [number, number];
@@ -59,6 +68,9 @@ export interface TodaySummary {
   readiness: Readiness | null;
   checkedIn: boolean;
   tournament: boolean;
+  program: { id: BandId; name: string; ages: string; tagline: string; sleepHours: [number, number]; parentVoice: boolean };
+  /** Food-safety items for the Today card. */
+  safety: { confirmed: boolean; epinephrine: boolean; medicalDiets: string[] };
   disclaimer: string;
 }
 
@@ -133,13 +145,22 @@ export function dailyTargets(profile: AthleteProfile, date: string, type = class
 
   const trainingMin =
     type === "match" ? 110 : type === "training" ? profile.training?.avgSessionMinutes || 90 : 0;
-  const fluidsL = Math.round((0.035 * M + (trainingMin / 60) * 0.75) * 10) / 10;
+  const band = bandForAge(effectiveAge(profile.identity));
+  const fluidsL = Math.round(((band.fluidMlPerKg / 1000) * M + (trainingMin / 60) * (band.inGame === "water_fruit" ? 0.5 : 0.75)) * 10) / 10;
+  const P = band.proteinPerKg;
+  const plate = type === "rest"
+    ? "A third carbs, a third protein, a third vegetables and fruit."
+    : type === "recovery"
+      ? "Half carbs, a quarter protein, a quarter vegetables and fruit, plus a protein snack."
+      : "Half carbs, a quarter protein, a quarter vegetables and fruit. Bigger portions today.";
 
   return {
     carbsPerKg: perKg,
     carbsG: [round5(perKg[0] * M), round5(perKg[1] * M)],
-    proteinG: [round5(1.5 * M), round5(2.0 * M)],
+    proteinG: [round5(P[0] * M), round5(P[1] * M)],
     fluidsL,
+    mode: band.targetsMode,
+    plate,
     note,
   };
 }
@@ -157,6 +178,8 @@ export function buildToday(
   date: string,
   checkin: DailyCheckIn | null,
 ): TodaySummary {
+  const age = effectiveAge(profile.identity);
+  const band = bandForAge(age);
   const type = classifyDay(profile, date);
   const targets = dailyTargets(profile, date, type);
   const todays = eventsOn(profile, date).map((e) => ref(e, date));
@@ -168,7 +191,9 @@ export function buildToday(
   const match = todays.find((e) => e.type === "match");
   if (type === "match" && match) {
     focus.push(`Pre-game meal about 3.5 hours before your ${to12(match.time)} kickoff.`);
-    focus.push("Pack a sports drink or gel for half-time, plus a recovery snack for right after.");
+    focus.push(band.inGame === "water_fruit"
+      ? `Pack water and ${examples(safetyContext(profile, { gameDay: true }), ["orange", "banana", "grapes"], 2, "halftime")} for half-time, plus a recovery snack for right after.`
+      : `Pack ${examples(safetyContext(profile, { gameDay: true }), ["sports_drink", "gel", "chews"], 2, "in_game")} for half-time, plus a recovery snack for right after.`);
   } else if (type === "match_eve") {
     focus.push("Carb-focused dinner tonight, and sip fluids through the evening.");
     focus.push(`Lay out your kit and aim for bed by ${to12(bed)}.`);
@@ -183,7 +208,15 @@ export function buildToday(
     focus.push("Balanced meals, a full water bottle, and your normal routine.");
   }
   if (tournament) focus.unshift("Tournament stretch: every meal and every hour of sleep counts.");
+  focus.push(fillText(band.focus[date.charCodeAt(9) % band.focus.length], safetyContext(profile)));
   focus.push(`Wake ${to12(wake)}. Lights out ${to12(bed)}.`);
+  // Is the routine long enough for this age's sleep need?
+  const [need] = sleepHoursFor(age);
+  const window = ((toMin(wake) - toMin(bed) + 1440) % 1440) / 60;
+  if (window < need) {
+    const ideal = fromMin(Math.floor((toMin(wake) - need * 60 - 30 + 1440) / 15) * 15);
+    focus.unshift(`${parentVoice(age) ? `${(profile.identity.fullName || "").split(" ")[0]} needs` : "You need"} at least ${need} hours of sleep. Bedtime ${to12(bed)} to ${to12(wake)} is only ${Math.round(window * 10) / 10} hours. Try lights out by ${to12(ideal)}.`);
+  }
 
   const readiness = computeReadiness(checkin);
   return {
@@ -199,6 +232,15 @@ export function buildToday(
     readiness,
     checkedIn: !!checkin,
     tournament,
+    program: {
+      id: band.id, name: band.name, ages: band.ages, tagline: band.tagline,
+      sleepHours: sleepHoursFor(age), parentVoice: parentVoice(age),
+    },
+    safety: {
+      confirmed: !!profile.nutrition.safetyConfirmedAt,
+      epinephrine: (profile.nutrition.allergies || []).some((a) => a.epinephrine || a.anaphylaxis),
+      medicalDiets: profile.nutrition.medicalDiets || [],
+    },
     disclaimer:
       "Starting targets from published sports-nutrition guidance. Not medical advice. Check with a doctor or dietitian for medical conditions.",
   };

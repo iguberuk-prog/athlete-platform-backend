@@ -16,7 +16,9 @@
 
 import type { AthleteProfile, ScheduledEvent } from "./profile.js";
 import type { DailyCheckIn } from "./checkin.js";
-import { safeFoodSuggestions } from "./plan.js";
+import { bandForAge, sleepHoursFor } from "./ageBands.js";
+import { effectiveAge } from "./profile.js";
+import { examples, names, pick, safetyContext } from "./foods.js";
 import { computeReadiness, type Readiness } from "./readiness.js";
 import { addDays, daysBetween, eventDate, eventTime, shiftLocal, shortDate, sortedEvents, to12, toMin } from "./dates.js";
 
@@ -97,9 +99,17 @@ export function buildRecoveryPlan(
   const cluster = matches.slice(lo, hi + 1);
   const tournament = cluster.length > 1;
 
-  const carbs = safeFoodSuggestions(profile, "carb");
-  const protein = safeFoodSuggestions(profile, "protein");
-  const perMealP = `${r5(0.3 * M)}-${r5(0.4 * M)} g`;
+  const age = effectiveAge(profile.identity);
+  const band = bandForAge(age);
+  const young = band.inGame === "water_fruit";
+  const [sleepLo, sleepHi] = sleepHoursFor(age);
+  const c = safetyContext(profile);
+  const cg = safetyContext(profile, { gameDay: true });
+  const perMealP = `${r5(band.perMealProteinPerKg * M)}-${r5((band.perMealProteinPerKg + 0.1) * M)} g`;
+  const P = band.proteinPerKg;
+  const EASY = ["sports_drink", "banana", "rice", "rice_cakes", "applesauce", "honey", "toast", "gf_toast"];
+  const SLOW = ["greek_yogurt", "cottage", "lf_yogurt", "milk", "lf_milk", "soy_milk"];
+  const dayFoods = () => [...names(pick(c, ["rice", "pasta", "gf_pasta", "potato", "oats", "bagel"], 3, "meal_carb")), ...names(pick(c, ["chicken", "salmon", "eggs", "greek_yogurt", "tofu", "turkey", "lentils"], 3, "protein"))];
 
   // Turnaround windows between linked matches.
   const windows: TurnaroundWindow[] = [];
@@ -116,8 +126,8 @@ export function buildRecoveryPlan(
         title: `Fast turnaround: ${gapHours} h until the next game`,
         steps: [
           `Start within 15 minutes: about ${r5(1.1 * M)} g carbs per hour for the next 4 hours, in small, frequent doses.`,
-          "Easy-to-digest carbs only: sports drink, banana, white rice, honey. Keep fat and fibre low.",
-          `Add ${r5(0.3 * M)} g protein in the first hour.`,
+          `Easy-to-digest carbs only: ${examples(cg, EASY, 4, "quick_carb")}. Keep fat and fibre low.`,
+          `Add ${r5(band.perMealProteinPerKg * M)} g protein in the first hour.`,
           "Rehydrate with electrolytes. Aim for pale-yellow urine before the next warm-up.",
           "Legs up, shade or cool room, no extra running.",
         ],
@@ -127,10 +137,10 @@ export function buildRecoveryPlan(
         from: endStr, to, gapHours, kind: "same_or_next_day",
         title: `Next game in ${Math.round(gapHours)} h`,
         steps: [
-          `Recovery snack within 30 minutes: about ${r5(1.2 * M)} g carbs + ${r5(0.3 * M)}-40 g protein.`,
+          `Recovery snack within 30 minutes: about ${r5(1.2 * M)} g carbs + ${perMealP} protein.`,
           `Full meal within 2 hours. Aim for ${r5(6 * M)}-${r5(10 * M)} g carbs across the next 24 hours.`,
           "Replace about 150% of the fluid you lost, with salt or electrolytes.",
-          "Slow protein before bed and at least 8-9 hours of sleep.",
+          `Slow protein before bed and ${sleepLo}-${sleepHi} hours of sleep.`,
           "Morning of the next game: normal pre-game meal 3-4 hours before kickoff.",
         ],
       });
@@ -148,7 +158,7 @@ export function buildRecoveryPlan(
   const last = eventDate(cluster[cluster.length - 1]);
   const upcomingAfter = matches[hi + 1] ? eventDate(matches[hi + 1]) : null;
   const days: RecoveryDay[] = [];
-  const span = daysBetween(first, last) + 2;
+  const span = daysBetween(first, last) + 2 + band.extraRecoveryDays;
   for (let d = 0; d <= span; d++) {
     const date = addDays(first, d);
     const matchesToday = cluster.filter((e) => eventDate(e) === date);
@@ -166,10 +176,10 @@ export function buildRecoveryPlan(
     if (isMatchDay) {
       label = matchesToday.length > 1 ? `${matchesToday.length} games` : `Game ${cluster.indexOf(matchesToday[0]) + 1}`;
       title = `Game day: ${matchesToday.map((e) => to12(eventTime(e))).join(" and ")}`;
-      carbsTxt = `${r5(6 * M)}-${r5(8 * M)} g plus 30-60 g per hour during play`;
+      carbsTxt = young ? "Bigger carb servings at meals, water during play" : `${r5(6 * M)}-${r5(8 * M)} g plus 30-60 g per hour during play`;
       actions.push("Recovery snack within 30 minutes of the final whistle.");
       actions.push("Recovery dinner within 2 hours: carbs + protein + vegetables.");
-      actions.push("Slow protein before bed, such as Greek yogurt or a protein shake if you tolerate dairy.");
+      actions.push(`A protein snack before bed, such as ${examples(c, SLOW, 2, "slow_protein", "a protein snack you tolerate")}.`);
       actions.push("Screens off early. Sleep is the biggest recovery tool you have.");
     } else if (date > first && date < last) {
       label = "Between games";
@@ -185,8 +195,9 @@ export function buildRecoveryPlan(
       actions.push("Carb-rich breakfast within an hour of waking.");
       actions.push(`Protein at 4-5 meals and snacks, about ${perMealP} each.`);
       actions.push("Active recovery only: walk, easy bike or swim, mobility, foam rolling.");
-      actions.push("Aim for 9 hours of sleep tonight.");
+      actions.push(`Aim for ${sleepHi >= 9 ? sleepHi : sleepLo + 1} hours of sleep tonight.`);
       if (tournament) actions.push("After a tournament, add one extra rest day before any hard session.");
+      if (band.extraRecoveryDays) actions.push(`${band.name} program: no hard efforts for ${band.extraRecoveryDays + 1} days after a game. Muscles and tendons take longer to bounce back.`);
     } else {
       label = `Day +${after}`;
       title = gameSoon ? "Sharpen for the next game" : "Back to normal training";
@@ -194,7 +205,9 @@ export function buildRecoveryPlan(
       actions.push(
         sore
           ? "Still sore: keep it light today and tell your coach."
-          : "If soreness is 5 or lower, normal training is fine.",
+          : band.extraRecoveryDays && after <= 1 + band.extraRecoveryDays
+            ? "Still an easy day in your program: mobility, easy cardio, light technical work."
+            : "If soreness is 5 or lower, normal training is fine.",
       );
       actions.push(`Protein ${perMealP} at each meal.`);
     }
@@ -205,9 +218,9 @@ export function buildRecoveryPlan(
       label: `${label} · ${shortDate(date)}`,
       title,
       carbs: carbsTxt,
-      protein: `${r5(1.6 * M)}-${r5(2.0 * M)} g`,
+      protein: `${r5(P[0] * M)}-${r5(P[1] * M)} g`,
       actions,
-      foods: [...carbs.slice(0, 3), ...protein.slice(0, 3)],
+      foods: dayFoods(),
       readiness,
       isMatchDay,
     });

@@ -308,3 +308,15 @@ table.data th { color: var(--dim); font-weight: 800; }
 @media (min-width: 720px) {
   .hero .headline { font-size: 36px; }
 }
+
+/* ---------- food-safety interview + programs ---------- */
+.qblock { padding: 16px 0; border-top: 1px solid var(--line); }
+.qblock:first-child { border-top: 0; padding-top: 4px; }
+.q { font-size: 16px; font-weight: 800; margin-bottom: 10px; }
+.allergyRow { background: var(--bg2); border: 1px solid var(--line2); border-radius: var(--r2); padding: 12px 14px; margin-top: 10px; }
+.allergyRow .seg { margin: 8px 0 2px; }
+.check.confirm { background: rgba(191,246,63,.07); border: 1px solid rgba(191,246,63,.35); border-radius: var(--r2); padding: 12px; margin-top: 18px; }
+.progcard { margin-top: 12px; padding: 12px 14px; border-radius: var(--r2); background: rgba(191,246,63,.07); border: 1px solid rgba(191,246,63,.3); }
+.progchip { display: inline-flex; margin-bottom: 8px; padding: 5px 10px; border-radius: var(--r3); border: 1px solid rgba(191,246,63,.4); background: rgba(11,14,18,.5); color: var(--lime); font-size: 12px; font-weight: 800; cursor: pointer; min-height: 30px; align-items: center; }
+.plate { background: var(--bg2); border: 1px solid var(--line); border-radius: var(--r2); padding: 12px; }
+.tile .ic { font-weight: 900; color: var(--warn); }

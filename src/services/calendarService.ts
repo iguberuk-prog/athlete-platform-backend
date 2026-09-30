@@ -17,7 +17,15 @@ import type { FamilyService } from "./familyService.js";
 
 const MAX_BYTES = 2_000_000;
 
-export async function fetchFeed(url: string): Promise<string> {
+/** A calendar feed link inside a web page (webcal://, .ics, or an "ical" link), made absolute. */
+export function feedLinkIn(html: string, base: string): string | null {
+  const hrefs = [...html.matchAll(/href\s*=\s*["']([^"']+)["']/gi)].map((m) => m[1].replace(/&amp;/g, "&"));
+  const pick = hrefs.find((h) => /^webcal:/i.test(h)) || hrefs.find((h) => /\.ics(\?|$)/i.test(h)) || hrefs.find((h) => /ical|icalendar|calendar\/feed|ics_feed/i.test(h) && !/instructions|help/i.test(h));
+  if (!pick) return null;
+  try { return new URL(pick.replace(/^webcal:/i, "https:"), base).toString(); } catch { return null; }
+}
+
+export async function fetchFeed(url: string, depth = 0): Promise<string> {
   const https = url.replace(/^webcal:/i, "https:");
   if (!isFeedUrl(https)) throw new Error("That doesn't look like a calendar link.");
   const ctl = new AbortController();
@@ -28,7 +36,12 @@ export async function fetchFeed(url: string): Promise<string> {
     if (!res.ok) throw new Error(`The calendar site answered ${res.status}. Check the link.`);
     const text = await res.text();
     if (text.length > MAX_BYTES) throw new Error("That calendar is too large.");
-    if (!/BEGIN:VCALENDAR/.test(text)) throw new Error("That link isn't a calendar feed. Look for 'Subscribe' or 'Export calendar' in your team app.");
+    if (!/BEGIN:VCALENDAR/.test(text)) {
+      // People often paste the schedule page instead of its feed. Look for the feed link on that page once.
+      const inner = depth === 0 && /<html|<a\s/i.test(text) ? feedLinkIn(text, res.url || https) : null;
+      if (inner) return fetchFeed(inner, 1);
+      throw new Error("That link isn't a calendar feed. Look for 'Subscribe', 'Sync calendar' or 'iCal' in your team app and copy that link.");
+    }
     return text;
   } finally {
     clearTimeout(t);
@@ -71,8 +84,10 @@ export class CalendarService {
     if (feeds.length >= 6) return { ok: false, code: "invalid", message: "Up to 6 team calendars per player." };
     if (feeds.some((f) => f.url === url)) return { ok: false, code: "invalid", message: "That calendar is already added." };
     const app = detectApp(url);
-    const feed: CalendarFeed = { id: randomUUID(), url: url.trim(), kind: "ics", app: app?.id, name: String(name || (app && app.id !== "ical" ? `${app.name} calendar` : "Team calendar")).slice(0, 60), defaultZip: defaultZip || undefined };
+    const feed: CalendarFeed = { id: randomUUID(), url: url.trim(), kind: "ics", app: app?.id, name: String(name || (app && app.id !== "ical" ? (app.id === "google" ? "Google calendar" : `${app.name} calendar`) : "Team calendar")).slice(0, 60), defaultZip: defaultZip || undefined };
     const synced = await this.syncOne({ ...r.p, schedule: { ...(r.p.schedule || { events: [] }), feeds: [...feeds, feed] } }, feed.id);
+    const added = synced.schedule?.feeds?.find((f) => f.id === feed.id);
+    if (added?.lastError) return { ok: false, code: "invalid", message: added.lastError };
     const saved = await this.profiles.update(r.owner, id, strip(synced));
     return saved ? { ok: true, value: saved } : { ok: false, code: "not_found" };
   }

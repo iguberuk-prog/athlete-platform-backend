@@ -15,7 +15,7 @@ import type { ProfileInput } from "../src/domain/profile.js";
 import { TEAM_APPS, detectApp, googleToScheduled, teamsnapToScheduled } from "../src/domain/teamApps.js";
 import { validateProfileInput } from "../src/domain/validation.js";
 import { FamilyService } from "../src/services/familyService.js";
-import { CalendarService } from "../src/services/calendarService.js";
+import { CalendarService, feedLinkIn } from "../src/services/calendarService.js";
 import { ConnectService } from "../src/services/connectService.js";
 
 let passed = 0, failed = 0;
@@ -33,6 +33,12 @@ check("detect PlayMetrics link", detectApp("https://api.playmetrics.com/calendar
 check("detect GameChanger link", detectApp("webcal://api.team-manager.gc.com/ics-calendar-documents/x.ics")?.id === "gamechanger");
 check("unknown host: no guess", detectApp("https://example.org/cal.ics") === undefined);
 check("junk: no crash", detectApp("not a url") === undefined);
+
+// ---- pasted a page instead of the feed ----
+check("page link: finds webcal link", feedLinkIn('<a href="/help">Help</a><a href="webcal://club.sportngin.com/ical/team/9.ics">Subscribe</a>', "https://club.sportngin.com/schedule") === "https://club.sportngin.com/ical/team/9.ics");
+check("page link: finds relative .ics", feedLinkIn('<a href="/download/mls-2026-UTC.ics">Download</a>', "https://fixturedownload.com/download/ics/mls-2026") === "https://fixturedownload.com/download/mls-2026-UTC.ics");
+check("page link: skips 'ical instructions' help pages", feedLinkIn('<a href="/event/ical_instructions">How</a>', "https://x.com/") === null);
+check("page link: none on an ordinary page", feedLinkIn("<html><a href='/about'>About</a></html>", "https://x.com/") === null);
 
 // ---- mapping ----
 const tsItems = [
@@ -160,6 +166,11 @@ const svc = new ConnectService(profiles, family, records, calendar, http);
   const synced = await calendar.syncProfile("u1", cur);
   check("daily sync: every feed synced without errors", !!synced && synced.schedule!.feeds!.every((f) => !f.lastError && f.lastSyncedAt), JSON.stringify(synced?.schedule?.feeds?.map((f) => f.lastError)));
   check("saved profile stays valid", validateProfileInput(synced as any).valid, JSON.stringify(validateProfileInput(synced as any).errors));
+
+  // A bad link is refused on the first add, not saved with an error
+  const badCal = new CalendarService(profiles, family, async () => { throw new Error("The calendar site answered 404. Check the link."); });
+  const bad = await badCal.add("u1", p.id, "https://example.com/nope.ics");
+  check("bad link: refused with the reason, nothing saved", !bad.ok && /404/.test(bad.message || "") && !(await profiles.getById("u1", p.id))!.schedule!.feeds!.some((f) => f.url.includes("example.com")));
 
   // Expired sign-in shows as a problem on that feed, others keep working
   gFail = true;

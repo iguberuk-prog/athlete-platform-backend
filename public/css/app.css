@@ -416,3 +416,22 @@ details.skill summary { cursor: pointer; }
   .ecall { border: 1px solid #000; }
   .mbars i { background: #333 !important; }
 }
+
+/* ---- clubs and team hub --------------------------------------------- */
+.mark { background: var(--brand, var(--lime)); }
+img.mark.logo { object-fit: contain; background: #fff; padding: 2px; }
+.clubhero { border-color: var(--club, var(--line)); }
+.clublogo { width: 56px; height: 56px; object-fit: contain; background: #fff; border-radius: 12px; float: right; }
+.seg.scroll { overflow-x: auto; white-space: nowrap; max-width: 100%; }
+.qr { width: 180px; margin: 10px auto; background: #fff; border-radius: 12px; padding: 6px; }
+.qr:empty { display: none; }
+.qr svg { width: 100%; height: auto; display: block; }
+.chal, .hw { padding: 10px 0; border-bottom: 1px solid var(--line); }
+ol.board { margin: 8px 0; padding-left: 22px; }
+ol.board li { display: flex; justify-content: space-between; padding: 2px 0; }
+ol.board li b { color: var(--lime); }
+table.med td { vertical-align: top; }
+.input.sm { width: auto; padding: 6px 8px; }
+.sponsor { font-size: 13px; color: var(--muted); text-align: center; margin: 12px 0; }
+@media print { table.med, table.med td { font-size: 11px; } .eh { color: #000 !important; } }
+.seg.scroll { margin-bottom: 12px; }

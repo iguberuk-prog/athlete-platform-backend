@@ -6,7 +6,7 @@
  */
 
 import type { Config } from "@netlify/functions";
-import { getCalendarService, getIntegrationService } from "../../src/container.js";
+import { getCalendarService, getIntegrationService, getTeamHubService } from "../../src/container.js";
 import { getProfileService } from "../../src/container.js";
 
 export default async (): Promise<Response> => {
@@ -20,6 +20,8 @@ export default async (): Promise<Response> => {
       await cal.syncProfile(p.ownerId, p).catch(() => null);
       calendars++;
     }
+    const teamFeeds = await getTeamHubService().syncAllFeeds(6_000);
+    console.log(`daily-sync: ${teamFeeds} team calendars`);
     const devices = await getIntegrationService().syncAll(Math.max(2_000, 24_000 - (Date.now() - t0)));
     console.log(`daily-sync: ${calendars} calendars, ${devices} devices`);
   } catch (err) {

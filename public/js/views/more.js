@@ -57,6 +57,8 @@ export async function render(el, ctx) {
     ${tile("#/safesport", "shield", "Safe sport", "Warning signs and how to report")}
     ${p && (p.features?.appleHealth || p.features?.whoop || p.features?.garmin) ? tile("#/devices", "watch", "Devices", "Whoop, Oura, Garmin, Apple Health") : ""}
     ${tile("#/family", "family", "Family", "Link parent and player accounts")}
+    ${p ? tile("#/experts", "heart", "Dietitians and camps", "Book a sports dietitian, find camps") : ""}
+    ${tile("#/club", "team", "Club", isCoach() ? "Club staff, fields, medical roster" : "For club directors, coaches and trainers")}
     ${tile("#/team", "team", isCoach() ? "My teams" : "Team", isCoach() ? "Rosters, readiness and join codes" : "Join your coach's team")}
     ${isParent() ? tile("#/profile/new", "user", "Add an athlete", "Manage another child's plan") : ""}
     <div class="sectionTitle">Settings</div>

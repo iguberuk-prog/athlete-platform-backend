@@ -7,7 +7,7 @@
  * - Writes (POST/PUT/DELETE) are never cached.
  * - Logging out clears cached API answers.
  */
-const VERSION = "v6";
+const VERSION = "v7";
 const SHELL = `shell-${VERSION}`;
 const API = `api-${VERSION}`;
 const PRECACHE = [

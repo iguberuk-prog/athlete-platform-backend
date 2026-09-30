@@ -2,7 +2,7 @@
 
 import { esc, todayStr, msg, storeGet, storeSet } from "../ui.js";
 import { api, errText } from "../api.js";
-import { render as rerender } from "../app.js";
+import { render as rerender, state } from "../app.js";
 
 const MEAL = { breakfast: "Breakfast", lunch: "Lunch", dinner: "Dinner", snack: "Snack", recovery: "Recovery" };
 const TAG = { match: "Game day", match_eve: "Night before a game", recovery: "Recovery day", training: "Training day", rest: "Rest day" };
@@ -36,6 +36,7 @@ export async function render(el, ctx) {
         ${pl.before.length ? `<div class="rowsub">Before a game</div>${list(pl.before)}` : ""}
         ${pl.after.length ? `<div class="rowsub">After a game</div>${list(pl.after)}` : ""}
         ${pl.ask.map((a) => `<div class="warnbox">${esc(a)}</div>`).join("")}</div>`).join("")}
+    ${state.club?.sponsor ? `<div class="sponsor">Meal guide sponsored by ${state.club.sponsor.url ? `<a href="${esc(state.club.sponsor.url)}" target="_blank" rel="noopener sponsored">${esc(state.club.sponsor.name)}</a>` : esc(state.club.sponsor.name)}${state.club.sponsor.message ? `: ${esc(state.club.sponsor.message)}` : ""}</div>` : ""}
     <p class="disc">Always read labels. Brands change what's in their food.</p>`;
 }
 

@@ -1,6 +1,7 @@
 // Today: day type, countdown, readiness, daily targets, focus, next reminders.
 
-import { esc, todayStr, nowStr, to12, relDay, untilText, icon } from "../ui.js";
+import { esc, todayStr, nowStr, to12, relDay, untilText, icon, storeGet } from "../ui.js";
+import { state } from "../app.js";
 import { api, errText } from "../api.js";
 import { weatherCard } from "../weather.js";
 
@@ -36,7 +37,11 @@ export async function render(el, ctx) {
       <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px"><h3 style="margin:0">${esc(next.title)} · ${esc(next.time)}</h3><b class="big" data-countdown="${esc(next.at)}">${esc(untilText(next.at))}</b></div>
       ${next.eatBy ? `<div class="pill ready" style="margin-top:8px"><span class="dot"></span>${esc(next.eatBy)}</div>` : ""}
       <p class="rowsub" style="margin:8px 0 0">${esc(next.tip)}</p></div>` : "";
-  const topStrip = `${streak ? `<button class="streak" data-act="nav" data-to="#/progress">${icon("flame")} ${streak.current} day${streak.current === 1 ? "" : "s"}${prog.newest ? ` · New badge: ${esc(prog.newest)}` : ""}</button>` : ""}
+  const cl = state.club;
+  const clubStrip = `${storeGet("pendingJoin", "") ? `<button class="tile" data-act="nav" data-to="#/team"><span class="ic">+</span><span><div class="tt">Finish joining your team</div><div class="ts">Code ${esc(storeGet("pendingJoin", ""))} is ready to go.</div></span><span class="chev">›</span></button>` : ""}
+    ${cl ? cl.fields.map((f) => `<div class="msg err" style="margin:0 0 10px"><b>${esc(f.name)} ${esc(f.status)}.</b> ${esc(f.note || "")}</div>`).join("") : ""}
+    ${cl && cl.onCall.length ? `<a class="tile" href="tel:${esc(cl.onCall[0].phone.replace(/[^\d+]/g, ""))}" style="text-decoration:none"><span class="ic">${icon("heart")}</span><span><div class="tt">Athletic trainer on call: ${esc(cl.onCall[0].name)}</div><div class="ts">${esc(cl.onCall[0].location || "")} · tap to call</div></span><span class="chev">›</span></a>` : ""}`;
+  const topStrip = clubStrip + `${streak ? `<button class="streak" data-act="nav" data-to="#/progress">${icon("flame")} ${streak.current} day${streak.current === 1 ? "" : "s"}${prog.newest ? ` · New badge: ${esc(prog.newest)}` : ""}</button>` : ""}
     ${risk && risk.level !== "low" ? `<button class="tile" data-act="nav" data-to="#/progress" style="border-color:${risk.level === "high" ? "rgba(255,107,107,.6)" : "rgba(255,200,87,.5)"}"><span class="ic">!</span><span><div class="tt">${risk.level === "high" ? "High" : "Rising"} injury risk this week</div><div class="ts">${esc(risk.factors[0]?.text || "")}</div></span><span class="chev">›</span></button>` : ""}`;
   if (!r.ok) { el.innerHTML = `<div class="msg err">${esc(errText(r))}</div>`; return; }
   const t = r.data;

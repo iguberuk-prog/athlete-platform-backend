@@ -22,6 +22,9 @@ import * as scan from "./views/scan.js";
 import * as devices from "./views/devices.js";
 import * as family from "./views/family.js";
 import * as report from "./views/report.js";
+import * as club from "./views/club.js";
+import * as teamhub from "./views/teamhub.js";
+import * as experts from "./views/experts.js";
 import * as journal from "./views/journal.js";
 import * as progress from "./views/progress.js";
 import * as mind from "./views/mind.js";
@@ -42,13 +45,13 @@ export const state = {
 const VIEWS = {
   today, gameday, recovery, checkin, more, schedule, trends, grocery, team,
   profile, program, reminders: settings, account: settings,
-  health, meals, scan, devices, family, report,
+  health, meals, scan, devices, family, report, club, teamhub, experts,
   journal, progress, mind, tournament, emergency, safesport, budget, season, ask,
 };
 
 // Views register click handlers by name; buttons carry data-act="name".
 const actions = {};
-for (const v of [auth, profile, today, gameday, recovery, checkin, more, schedule, trends, grocery, team, settings, program, health, meals, scan, devices, family, report, journal, progress, mind, tournament, emergency, safesport, budget, season, ask]) {
+for (const v of [auth, profile, today, gameday, recovery, checkin, more, schedule, trends, grocery, team, settings, program, health, meals, scan, devices, family, report, club, teamhub, experts, journal, progress, mind, tournament, emergency, safesport, budget, season, ask]) {
   Object.assign(actions, v.actions || {});
 }
 
@@ -63,6 +66,19 @@ export function go(hash) {
 export function setActive(id) {
   state.activeId = id;
   storeSet("activeProfile", id);
+}
+
+/** Club branding, sponsor and on-call trainer for the active player's teams. */
+export async function loadClub() {
+  const p = active();
+  state.club = null;
+  const root = document.documentElement.style;
+  root.removeProperty("--brand");
+  if (!p) return;
+  const r = await api(`/api/profiles/${p.id}/club`);
+  const c = r.ok ? r.data.clubs[0] : null;
+  state.club = c || null;
+  if (c?.brand?.primary) root.setProperty("--brand", c.brand.primary);
 }
 
 export async function loadProfiles() {
@@ -97,6 +113,7 @@ const TITLES = {
   schedule: "Schedule", trends: "Trends", grocery: "Grocery list", team: "Team", profile: "Profile",
   reminders: "Reminders", account: "Account", program: "My program",
   health: "Health", meals: "Meals", scan: "Scan food", devices: "Devices", family: "Family", report: "Weekly report",
+  club: "Club", teamhub: "Team", experts: "Dietitians and camps",
   journal: "Journal", progress: "Progress", mind: "Mental skills", tournament: "Tournament", emergency: "Emergency card", safesport: "Safe sport", budget: "Season budget", season: "Season review", ask: "Ask",
 };
 
@@ -114,6 +131,11 @@ export async function render() {
   const seq = ++renderSeq;
   const app = $("#app");
   state.route = parseHash();
+  if (state.route.name === "join") {
+    if (state.route.query.code) storeSet("pendingJoin", String(state.route.query.code).toUpperCase().slice(0, 8));
+    history.replaceState(null, "", state.user ? "#/team" : "#/signup");
+    state.route = parseHash();
+  }
 
   if (!state.user) {
     app.innerHTML = "";
@@ -140,7 +162,7 @@ export async function render() {
 
   app.innerHTML = `
     <header class="topbar">
-      ${tabNames.includes(name) ? `<div class="mark" aria-hidden="true">A</div>` : `<button class="btn link sm" data-act="back" aria-label="Back">‹ Back</button>`}
+      ${tabNames.includes(name) ? (state.club?.brand?.logoUrl ? `<img class="mark logo" src="${esc(state.club.brand.logoUrl)}" alt="${esc(state.club.name)}">` : `<div class="mark" aria-hidden="true">A</div>`) : `<button class="btn link sm" data-act="back" aria-label="Back">‹ Back</button>`}
       <h1>${esc(titleText)}</h1>
     </header>
     <div id="offline" class="offline" ${navigator.onLine ? "hidden" : ""}>Offline. Showing your last saved plan.</div>
@@ -191,7 +213,7 @@ async function syncWidgets(p) {
 Object.assign(actions, {
   nav: (el) => go(el.dataset.to),
   back: () => (history.length > 1 ? history.back() : go("#/today")),
-  switchProfile: async (el) => { setActive(el.dataset.id); await render(); syncReminders(); },
+  switchProfile: async (el) => { setActive(el.dataset.id); await loadClub().catch(() => {}); await render(); syncReminders(); },
 });
 
 document.addEventListener("click", (ev) => {
@@ -224,6 +246,7 @@ export async function afterSignIn() {
   state.user = await currentUser();
   if (!state.user) { render(); return; }
   await loadProfiles();
+  await loadClub().catch(() => {});
   if (!location.hash || location.hash === "#/" || location.hash.startsWith("#/login") || location.hash.startsWith("#/signup")) {
     location.hash = isCoach() && !state.profiles.length ? "#/team" : "#/today";
   }

@@ -23,7 +23,9 @@ New in this release:
 - Garmin: apply at developer.garmin.com (Health API). Leave `GARMIN_APPROVED` unset until approved.
 - Ask the app uses the same `ANTHROPIC_API_KEY` as meal photos.
 - iPhone widgets (game countdown, emergency card): run `npm install` in `mobile/`, then `npx expo prebuild --clean` and an EAS build. The widget needs the App Group `group.com.guberuk.athleteperformance` enabled for the app ID in your Apple developer account (EAS can do this for you).
-- Scheduled functions run on their own: `daily-sync` (calendars and devices, daily) and `weekly-report` (Sunday evening).
+- Club subscriptions (Stripe): create a recurring per-player price, then set `STRIPE_SECRET_KEY`, `STRIPE_PRICE_ID`, `STRIPE_WEBHOOK_SECRET`. Add the webhook `{APP_URL}/api/stripe/webhook` with events checkout.session.completed, customer.subscription.updated, customer.subscription.deleted, invoice.payment_failed. The iPhone app never shows prices or a buy button (Apple rules); clubs subscribe on the website.
+- Dietitian listings and public camps are approved with the admin key: `GET /api/admin/dietitians`, `POST /api/admin/dietitians/{id}` with `{"status":"approved"}`, header `x-admin-key: ADMIN_KEY`.
+- Scheduled functions run on their own: `daily-sync` (player and team calendars, devices, daily), `field-alerts` (club field heat, storm and air alerts at 7 AM and 1 PM Eastern) and `weekly-report` (Sunday evening).
 
 ## 2. Use it with the team this week
 

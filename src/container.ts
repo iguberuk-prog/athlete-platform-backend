@@ -35,6 +35,10 @@ import { PlateService } from "./services/plateService.js";
 import { ResendMailer } from "./services/notifier.js";
 import { PlayerService } from "./services/playerService.js";
 import { AskService } from "./services/askService.js";
+import { ClubService } from "./services/clubService.js";
+import { TeamHubService } from "./services/teamHubService.js";
+import { BillingService } from "./services/billingService.js";
+import { MarketService } from "./services/marketService.js";
 import { ProfileService } from "./services/profileService.js";
 import { CheckInService } from "./services/checkinService.js";
 import { PlanService } from "./services/planService.js";
@@ -59,6 +63,10 @@ interface Services {
   plates: PlateService;
   player: PlayerService;
   ask: AskService;
+  clubs: ClubService;
+  hub: TeamHubService;
+  billing: BillingService;
+  market: MarketService;
 }
 
 function wire(p: AthleteProfileRepository, c: CheckInRepository, t: TeamRepository, r: RecordRepository): Services {
@@ -69,6 +77,7 @@ function wire(p: AthleteProfileRepository, c: CheckInRepository, t: TeamReposito
         : new NwsProvider();
   const family = new FamilyService(p, r);
   const mailer = new ResendMailer();
+  const clubs = new ClubService(p, c, t, r, mailer, weather);
   return {
     profiles: new ProfileService(p),
     checkins: new CheckInService(c, p),
@@ -85,6 +94,9 @@ function wire(p: AthleteProfileRepository, c: CheckInRepository, t: TeamReposito
     plates: new PlateService(p, family, r),
     player: new PlayerService(p, c, family, r),
     ask: new AskService(p, c, family, r, weather),
+    clubs, hub: new TeamHubService(p, c, t, r, family, clubs),
+    billing: new BillingService(clubs, r),
+    market: new MarketService(p, family, r, clubs, mailer),
   };
 }
 
@@ -152,3 +164,7 @@ export const getIntegrationService = () => getServices().integrations;
 export const getPlateService = () => getServices().plates;
 export const getPlayerService = () => getServices().player;
 export const getAskService = () => getServices().ask;
+export const getClubService = () => getServices().clubs;
+export const getTeamHubService = () => getServices().hub;
+export const getBillingService = () => getServices().billing;
+export const getMarketService = () => getServices().market;

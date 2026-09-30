@@ -4,6 +4,8 @@ import { $, esc, todayStr, relDay, to12, msg, toast, avatar, daysBetween } from 
 import { api, errText } from "../api.js";
 import { active, isCoach, go, render as rerender } from "../app.js";
 import { statusPill } from "./today.js";
+import { renderHub } from "./teamhub.js";
+import { storeGet, storeSet } from "../ui.js";
 
 export async function render(el, ctx) {
   if (isCoach()) return ctx.sub ? roster(el, ctx) : coachHome(el, ctx);
@@ -27,6 +29,18 @@ async function coachHome(el, ctx) {
       <div id="out"></div>
     </form>
     <div class="card"><h3>What coaches see</h3><p class="sub" style="margin:0">Name, photo, position, readiness from check-ins, next game, allergies and diet, and whether an injury is on file (no details). Players' contact details, medical notes and full history stay private.</p></div>`;
+}
+
+async function drawQR(code) {
+  const box = document.getElementById("qr");
+  if (!box) return;
+  try {
+    if (!window.qrcode) await new Promise((res, rej) => { const s = document.createElement("script"); s.src = "https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"; s.onload = res; s.onerror = rej; document.head.appendChild(s); });
+    const q = window.qrcode(0, "M");
+    q.addData(`${location.origin}/#/join?code=${code}`);
+    q.make();
+    box.innerHTML = q.createSvgTag({ cellSize: 5, margin: 2, scalable: true });
+  } catch { box.innerHTML = ""; }
 }
 
 async function roster(el, ctx) {
@@ -56,6 +70,8 @@ async function roster(el, ctx) {
     <div class="card">
       <h3>Join code</h3>
       <div class="codebox" aria-label="Join code">${esc(team.code)}</div>
+      <div id="qr" class="qr"></div>
+      <p class="rowsub">Parents scan this at registration to sign up and join the team.</p>
       <div class="actions"><button class="btn primary" data-act="shareCode" data-code="${esc(team.code)}" data-name="${esc(team.name)}">Share with players</button></div>
     </div>
     <div class="card">
@@ -82,7 +98,12 @@ async function roster(el, ctx) {
         </div>`;
       }).join("") : `<p class="muted">No players yet. Share the join code above.</p>`}
     </div>
+    <div class="sectionTitle">Team hub</div>
+    <div id="hubBox"></div>
     <button class="btn danger block" data-act="deleteTeam" data-team="${team.id}" data-name="${esc(team.name)}">Delete team</button>`;
+
+  drawQR(team.code);
+  renderHub(document.getElementById("hubBox"), team.id);
 }
 
 // ---------------- player / parent ----------------
@@ -94,12 +115,12 @@ async function playerTeams(el, ctx) {
   const teams = r.ok ? r.data.teams : [];
   el.innerHTML = `
     ${teams.length ? `<div class="card"><h3>${esc(p.identity.fullName.split(" ")[0])}'s teams</h3><ul class="list">${teams.map((t) => `
-      <li><div style="flex:1"><div class="rowtitle">${esc(t.name)}</div><div class="rowsub">Joined ${esc(relDay(t.joinedAt.slice(0, 10)).toLowerCase())}</div></div>
+      <li><button class="linkrow" data-act="nav" data-to="#/teamhub/${t.id}" style="flex:1"><div><div class="rowtitle">${esc(t.name)} ›</div><div class="rowsub">Announcements, challenges, homework, sign-ups</div></div></button>
       <button class="btn ghost sm" data-act="leaveTeam" data-team="${t.id}" data-name="${esc(t.name)}">Leave</button></li>`).join("")}</ul></div>` : ""}
     <form class="card" data-submit="joinTeam" novalidate>
       <h2>Join a team</h2>
       <p class="sub">Enter the 6-character code from your coach.</p>
-      <input class="input" id="code" autocapitalize="characters" autocomplete="off" maxlength="8" placeholder="e.g. K7F2QM" style="font-family:ui-monospace,Menlo,monospace;font-size:22px;letter-spacing:3px;text-transform:uppercase">
+      <input class="input" id="code" value="${esc(storeGet("pendingJoin", "") || "")}" autocapitalize="characters" autocomplete="off" maxlength="8" placeholder="e.g. K7F2QM" style="font-family:ui-monospace,Menlo,monospace;font-size:22px;letter-spacing:3px;text-transform:uppercase">
       <div class="actions"><button class="btn primary block" type="submit">Join</button></div>
       <div id="out"></div>
     </form>
@@ -145,6 +166,7 @@ export const actions = {
     const r = await api(`/api/profiles/${active().id}/teams`, { method: "POST", body: { code } });
     if (!r.ok) return ($("#out").innerHTML = msg("err", errText(r)));
     toast(`Joined ${r.data.team.name}`);
+    storeSet("pendingJoin", "");
     rerender();
   },
   async leaveTeam(btn) {

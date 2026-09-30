@@ -373,7 +373,7 @@ export class SupabaseRecordRepository implements RecordRepository {
     const now = new Date().toISOString();
     const row: Record<string, unknown> = { id: rec.id, kind: rec.kind, key: rec.key, owner_id: rec.ownerId, data: rec.data, updated_at: now };
     if (rec.createdAt) row.created_at = rec.createdAt;
-    const { data, error } = await this.client.from(RECORDS).upsert(row).select("*").single();
+    const { data, error } = await this.client.from(RECORDS).upsert(row, { onConflict: "kind,id" }).select("*").single();
     if (error) throw error;
     return sbRecord<T>(data as SbRecordRow);
   }

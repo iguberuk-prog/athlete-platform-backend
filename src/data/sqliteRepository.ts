@@ -321,7 +321,7 @@ export class SqliteRecordRepository implements RecordRepository {
   constructor(private readonly db: DB) {}
   async put<T>(rec: Omit<AppRecord<T>, "createdAt" | "updatedAt"> & { createdAt?: string }): Promise<AppRecord<T>> {
     const now = new Date().toISOString();
-    const prev = this.db.prepare(`SELECT created_at FROM app_records WHERE id = ?`).get(rec.id) as { created_at: string } | undefined;
+    const prev = this.db.prepare(`SELECT created_at FROM app_records WHERE kind = ? AND id = ?`).get(rec.kind, rec.id) as { created_at: string } | undefined;
     const createdAt = prev?.created_at || rec.createdAt || now;
     this.db.prepare(`INSERT OR REPLACE INTO app_records (id, kind, key, owner_id, data, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`)
       .run(rec.id, rec.kind, rec.key, rec.ownerId, JSON.stringify(rec.data), createdAt, now);

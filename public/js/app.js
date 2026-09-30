@@ -37,6 +37,7 @@ import * as ask from "./views/ask.js";
 import * as fun from "./views/fun.js";
 import * as connect from "./views/connect.js";
 import * as invite from "./views/invite.js";
+import { openSearch, closeSearch } from "./search.js";
 
 export const state = {
   user: null,          // { email, role }
@@ -134,6 +135,7 @@ function switcher() {
 let renderSeq = 0;
 export async function render() {
   const seq = ++renderSeq;
+  closeSearch();
   const app = $("#app");
   state.route = parseHash();
   if (state.route.name === "join") {
@@ -175,6 +177,8 @@ export async function render() {
     <header class="topbar">
       ${tabNames.includes(name) ? (state.club?.brand?.logoUrl ? `<img class="mark logo" src="${esc(state.club.brand.logoUrl)}" alt="${esc(state.club.name)}">` : `<div class="mark" aria-hidden="true">A</div>`) : `<button class="btn link sm" data-act="back" aria-label="Back">‹ Back</button>`}
       <h1>${esc(titleText)}</h1>
+      ${needsProfile ? "" : `<button class="hbtn" data-act="openSearch" aria-label="Search">${icon("search")}</button>
+      <button class="hbtn invite" data-act="nav" data-to="#/invite" aria-label="Invite a friend">${icon("invite")}<span>Invite</span></button>`}
     </header>
     <div id="offline" class="offline" ${navigator.onLine ? "hidden" : ""}>Offline. Showing your last saved plan.</div>
     <main class="main ${tabs.length ? "" : "noTabs"}">
@@ -223,6 +227,9 @@ async function syncWidgets(p) {
 // ---- global actions ----
 Object.assign(actions, {
   nav: (el) => go(el.dataset.to),
+  openSearch: () => openSearch(!!active()),
+  searchClose: () => closeSearch(),
+  searchGo: (el) => { closeSearch(); go(el.dataset.to); },
   back: () => (history.length > 1 ? history.back() : go("#/today")),
   switchProfile: async (el) => { setActive(el.dataset.id); await loadClub().catch(() => {}); await render(); syncReminders(); },
 });

@@ -99,7 +99,7 @@ export async function render(el, ctx) {
     ${p ? tile("#/emergency", "alert", "Emergency card", "Allergies, EpiPen, asthma, contacts") : ""}
     ${tile("#/safesport", "shield", "Safe sport", "Warning signs and how to report")}
     ${p && (p.features?.appleHealth || p.features?.whoop || p.features?.garmin) ? tile("#/devices", "watch", "Devices", "Whoop, Oura, Garmin, Apple Health") : ""}
-    ${tile("#/invite", "chat", "Invite a friend", "Text, email or QR code to get the app")}
+    ${tile("#/invite", "invite", "Invite a friend", "Text, email or QR code to get the app")}
     ${tile("#/family", "family", "Family", "Link parent and player accounts")}
     ${p ? tile("#/experts", "heart", "Dietitians and camps", "Book a sports dietitian, find camps") : ""}
     ${tile("#/club", "team", "Club", isCoach() ? "Club staff, fields, medical roster" : "For club directors, coaches and trainers")}

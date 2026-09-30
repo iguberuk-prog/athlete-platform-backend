@@ -19,6 +19,6 @@ export async function loadWeather(
   if (!zips.length) return undefined;
   const results = await Promise.all(zips.map((z) => provider.forecast(z).catch(() => null)));
   const byZip: WeatherIndex["byZip"] = {};
-  results.forEach((f, i) => { if (f) byZip[zips[i]] = { place: f.place, hours: f.hours }; });
+  results.forEach((f, i) => { if (f) byZip[zips[i]] = { place: f.place, hours: f.hours, timeZone: f.timeZone, alerts: f.alerts }; });
   return Object.keys(byZip).length ? { byZip } : undefined;
 }

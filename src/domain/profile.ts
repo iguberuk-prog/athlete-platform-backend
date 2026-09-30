@@ -128,11 +128,19 @@ export interface SportProfile {
   seasonStatus?: SeasonStatus;
 }
 
+export interface HeightReading {
+  /** ISO-8601 date (YYYY-MM-DD). */
+  date: string;
+  heightCm: number;
+}
+
 export interface Anthropometrics {
   heightCm: number;
   bodyMassKg: number;
   bodyFatPct?: number;
   massHistory?: MassReading[];
+  /** Height over time, for growth-spurt tracking in young players. */
+  heightHistory?: HeightReading[];
 }
 
 export interface TrainingProfile {
@@ -175,6 +183,37 @@ export interface RecoveryProfile {
   baselineEnergy?: number;
 }
 
+export interface AsthmaInfo {
+  /** Has asthma or exercise-induced bronchoconstriction. */
+  has: boolean;
+  /** Doctor says to use the inhaler before exercise. */
+  preExerciseInhaler?: boolean;
+  /** Known triggers, e.g. cold air, pollen, smoke. */
+  triggers?: string[];
+}
+
+/** One step of the CDC HEADS UP return-to-sport ladder (0 = resting, 6 = full game play). */
+export interface ConcussionStepLog {
+  step: number;
+  date: string;
+  /** Symptoms came back at this step. */
+  symptoms?: boolean;
+}
+
+export interface ConcussionCase {
+  id: string;
+  /** Date of the hit or suspected concussion (YYYY-MM-DD). */
+  date: string;
+  notes?: string;
+  /** Current step 0-6 on the return-to-sport ladder. */
+  step: number;
+  stepHistory: ConcussionStepLog[];
+  /** Name of the health care provider who cleared return to play. */
+  clearedBy?: string;
+  /** Date cleared for full play. Only a provider can clear. */
+  clearedAt?: string;
+}
+
 export interface HealthProfile {
   injuryHistory: InjuryRecord[];
   currentInjuries: InjuryRecord[];
@@ -183,6 +222,8 @@ export interface HealthProfile {
   medications: string[];
   recentIllnessStatus?: IllnessStatus;
   fitnessNotes?: string;
+  asthma?: AsthmaInfo;
+  concussions?: ConcussionCase[];
 }
 
 export interface GoalsProfile {
@@ -201,10 +242,40 @@ export interface AdvancedMetrics {
   estimatedCalorieExpenditure?: number;
   /** Optional and only if relevant to the athlete. */
   menstrualCycleTracking?: boolean;
+  /** Field sweat tests; sweatRateLitresPerHour is the median of these. */
+  sweatTests?: SweatTest[];
+  /** Typical cycle length in days (opt-in). */
+  cycleLengthDays?: number;
+}
+
+export interface SweatTest {
+  id: string;
+  date: string;
+  preKg: number;
+  postKg: number;
+  /** Fluid drunk during the session, litres. */
+  fluidL: number;
+  /** Urine passed during the session, litres (usually 0). */
+  urineL?: number;
+  minutes: number;
+  /** Feels-like temperature, °F, if known. */
+  tempF?: number;
+  /** Computed litres per hour. */
+  rateLph: number;
+  /** Percent of body mass lost. */
+  lossPct: number;
 }
 
 export interface ScheduledEvent {
   type: EventType;
+  /** Stable id for events imported from a team calendar feed. */
+  uid?: string;
+  /** Where it came from: "manual" or the calendar feed id. */
+  source?: string;
+  title?: string;
+  location?: string;
+  /** Minutes long, if known. */
+  durationMin?: number;
   /** 5-digit US ZIP of the field, for the weather forecast. Defaults to the home ZIP. */
   zip?: string;
   /** ISO-8601 datetime with offset, e.g. 2026-06-02T19:00:00+01:00. */
@@ -219,6 +290,10 @@ export interface Schedule {
   travelDays?: string[];
   /** ISO-8601 dates (typically weekends) of tournaments. */
   tournamentWeekends?: string[];
+  /** Subscribed team calendars. */
+  feeds?: CalendarFeed[];
+  /** First day of preseason, for the 14-day heat acclimatization plan. */
+  preseasonStart?: string;
 }
 
 /** Daily routine used to anchor plans and reminders. */
@@ -231,6 +306,34 @@ export interface Routine {
   usualPracticeTime?: string;
   /** 5-digit US ZIP where the athlete usually trains, for the weather forecast. */
   homeZip?: string;
+  /** School day, so meals and snacks fit around classes. */
+  school?: SchoolDay;
+}
+
+export interface SchoolDay {
+  /** 0 = Sunday ... 6 = Saturday. Usually [1,2,3,4,5]. */
+  days: number[];
+  /** HH:MM */
+  start: string;
+  /** HH:MM */
+  end: string;
+  /** HH:MM lunch start. */
+  lunch?: string;
+  /** Can eat a snack between classes. */
+  snackBreak?: boolean;
+}
+
+/** A team calendar the athlete subscribed to (TeamSnap, SportsEngine, PlayMetrics, ...). */
+export interface CalendarFeed {
+  id: string;
+  /** https:// or webcal:// subscription link. */
+  url: string;
+  name?: string;
+  /** ZIP used when an event's address has no ZIP. */
+  defaultZip?: string;
+  lastSyncedAt?: string;
+  lastError?: string;
+  eventCount?: number;
 }
 
 // --- the full profile ------------------------------------------------------
@@ -254,6 +357,7 @@ export interface AthleteProfile {
   advanced?: AdvancedMetrics;
   schedule?: Schedule;
   routine?: Routine;
+  notifications?: { weeklyReport?: boolean };
 
   createdAt: string;
   updatedAt: string;

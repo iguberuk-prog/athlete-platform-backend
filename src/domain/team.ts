@@ -44,6 +44,9 @@ export interface RosterEntry {
   allergies: string[];
   diets: string[];
   injuryFlag: boolean;
+  /** Safety flags only: not cleared, out sick, EpiPen, inhaler. */
+  flags: string[];
+  checkedInToday: boolean;
   joinedAt: string;
 }
 

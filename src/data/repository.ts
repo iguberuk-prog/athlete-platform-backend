@@ -17,6 +17,8 @@ import type { Team, TeamMember } from "../domain/team.js";
 export interface AthleteProfileRepository {
   create(ownerId: string, input: ProfileInput): Promise<AthleteProfile>;
   getById(ownerId: string, id: string): Promise<AthleteProfile | null>;
+  /** Unscoped lookup. Only for services that have already checked access (family links). */
+  findById(id: string): Promise<AthleteProfile | null>;
   listByOwner(ownerId: string): Promise<AthleteProfile[]>;
   /** Every profile across all owners. Admin-only — call sites must gate access. */
   listAll(): Promise<AthleteProfile[]>;
@@ -53,4 +55,26 @@ export interface TeamRepository {
   listMembershipsForProfile(ownerId: string, profileId: string): Promise<TeamMember[]>;
   /** Account deletion: drop every team this account coaches and every membership it owns. */
   deleteAllForOwner(ownerId: string): Promise<void>;
+}
+
+/** A small generic record (links, invites, integrations, usage counters). */
+export interface AppRecord<T = Record<string, unknown>> {
+  id: string;
+  kind: string;
+  key: string;
+  ownerId: string;
+  data: T;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface RecordRepository {
+  put<T>(rec: Omit<AppRecord<T>, "createdAt" | "updatedAt"> & { createdAt?: string }): Promise<AppRecord<T>>;
+  get<T>(kind: string, id: string): Promise<AppRecord<T> | null>;
+  listByKey<T>(kind: string, key: string): Promise<AppRecord<T>[]>;
+  listByOwner<T>(kind: string, ownerId: string): Promise<AppRecord<T>[]>;
+  listByKind<T>(kind: string, limit?: number): Promise<AppRecord<T>[]>;
+  delete(kind: string, id: string): Promise<boolean>;
+  deleteByOwner(ownerId: string): Promise<void>;
+  deleteByKey(kind: string, key: string): Promise<void>;
 }

@@ -46,6 +46,13 @@ async function roster(el, ctx) {
       <div class="greet">Team</div><div class="headline">${esc(team.name)}</div>
       <div class="note">${checkedToday} of ${players.length} checked in today${low ? ` · <b style="color:#ffb0b0">${low} flagged low</b>` : ""}${allergy ? ` · ${allergy} with allergies` : ""}</div>
     </section>
+    ${players.some((p) => (p.flags || []).some((f) => /Not cleared|Out sick/.test(f))) ? `<div class="msg err" style="margin:0 0 12px"><b>Can't play today:</b> ${esc(players.filter((p) => (p.flags || []).some((f) => /Not cleared|Out sick/.test(f))).map((p) => p.name).join(", "))}</div>` : ""}
+    <div class="card">
+      <h3>Team meal</h3>
+      <p class="sub">One food order that's safe for every player on this roster.</p>
+      <div class="actions"><button class="btn ghost" data-act="teamMeal" data-team="${team.id}" data-g="1">Pre-game meal</button><button class="btn ghost" data-act="teamMeal" data-team="${team.id}" data-g="0">Snacks and team dinner</button></div>
+      <div id="mealOut"></div>
+    </div>
     <div class="card">
       <h3>Join code</h3>
       <div class="codebox" aria-label="Join code">${esc(team.code)}</div>
@@ -66,7 +73,8 @@ async function roster(el, ctx) {
             <div class="pn">${esc(p.name)}${p.jerseyNumber !== undefined && p.jerseyNumber !== null ? ` <span class="dim">#${p.jerseyNumber}</span>` : ""}</div>
             <div class="pd">${esc(p.positions.join(", ").replace(/_/g, " "))}</div>
             <div style="margin-top:6px">${p.lastCheckinDate === today ? statusPill(p.readiness) : `<span class="pill neutral"><span class="dot"></span>${esc(stale)}</span>`}
-              ${p.injuryFlag ? `<span class="pill low"><span class="dot"></span>Injury on file</span>` : ""}</div>
+              ${p.injuryFlag ? `<span class="pill low"><span class="dot"></span>Injury on file</span>` : ""}
+              ${(p.flags || []).map((f) => `<span class="pill ${/Not cleared|Out sick/.test(f) ? "low" : "neutral"}"><span class="dot"></span>${esc(f)}</span>`).join("")}</div>
             ${bits.length ? `<div class="pd">${esc(bits.join(" · "))}</div>` : ""}
             ${p.allergies.length || p.diets.length ? `<div class="pd" style="color:#ffd98a">Avoid: ${esc([...p.allergies, ...p.diets].join(", ").replace(/_/g, " "))}</div>` : ""}
           </div>
@@ -99,6 +107,14 @@ async function playerTeams(el, ctx) {
 }
 
 export const actions = {
+  async teamMeal(btn) {
+    const r = await api(`/api/teams/${btn.dataset.team}/meal?gameDay=${btn.dataset.g}`);
+    if (!r.ok) return ($("#mealOut").innerHTML = msg("err", errText(r)));
+    const m = r.data;
+    $("#mealOut").innerHTML = `${m.tips.map((t) => `<div class="warnbox">${esc(t)}</div>`).join("")}
+      ${m.sections.map((sct) => `<div class="rowsub" style="margin-top:10px">${esc(sct.title)}</div><div>${sct.forEveryone.length ? esc(sct.forEveryone.join(", ")) : "<span class='dim'>Nothing safe for everyone. Plan individual options.</span>"}</div>`).join("")}
+      ${m.separatePlates.length ? `<div class="rowsub" style="margin-top:10px">Separate plates</div><ul class="list">${m.separatePlates.map((x) => `<li><div><b>${esc(x.name)}</b>: no ${esc(x.avoid.join(", ").replace(/_/g, " "))}</div></li>`).join("")}</ul>` : ""}`;
+  },
   async createTeam(form) {
     const name = $("#teamName").value.trim();
     if (!name) return ($("#out").innerHTML = msg("err", "Give the team a name."));

@@ -15,6 +15,12 @@ import { newJoinCode, normalizeCode, type RosterEntry, type Team } from "../doma
 import { computeReadiness } from "../domain/readiness.js";
 import { nextMatchFrom } from "../domain/daily.js";
 import { eventDate, eventTime } from "../domain/dates.js";
+import { coachFlags } from "../domain/health.js";
+import { teamMenu, type TeamMenu } from "../domain/teamMeal.js";
+import type { AthleteProfile } from "../domain/profile.js";
+import type { Mailer } from "./notifier.js";
+import { escHtml } from "./notifier.js";
+import type { FamilyService } from "./familyService.js";
 
 export type TeamResult<T> =
   | { ok: true; value: T }
@@ -29,6 +35,8 @@ export class TeamService {
     private readonly teams: TeamRepository,
     private readonly profiles: AthleteProfileRepository,
     private readonly checkins: CheckInRepository,
+    private readonly family?: FamilyService,
+    private readonly mailer?: Mailer,
   ) {}
 
   async create(coachOwnerId: string, name: string): Promise<TeamResult<Team>> {
@@ -87,6 +95,8 @@ export class TeamService {
         ],
         diets: p.nutrition.dietaryRestrictions || [],
         injuryFlag: (p.health?.currentInjuries || []).length > 0,
+        flags: coachFlags(p, today, last && last.date === today ? last : null),
+        checkedInToday: last?.date === today,
         joinedAt: m.joinedAt,
       });
     }
@@ -109,6 +119,7 @@ export class TeamService {
     const team = await this.teams.getByCode(normalizeCode(code));
     if (!team) return { ok: false, code: "invalid", message: "That team code was not found. Check it with your coach." };
     await this.teams.addMember({ teamId: team.id, profileId, ownerId, joinedAt: new Date().toISOString() });
+    await this.notifyParents(profile, team).catch(() => undefined);
     return { ok: true, value: team };
   }
 
@@ -130,5 +141,48 @@ export class TeamService {
       if (t) out.push({ id: t.id, name: t.name, joinedAt: m.joinedAt });
     }
     return { ok: true, value: out };
+  }
+
+  /** Coach safeguard: parents always hear when their player joins a team. */
+  private async notifyParents(profile: AthleteProfile, team: Team): Promise<void> {
+    if (!this.family || !this.mailer) return;
+    const to = await this.family.parentEmails(profile);
+    if (!to.length) return;
+    const name = profile.identity.fullName;
+    const text = `${name} joined the team "${team.name}" in Athlete Performance.\n\nThe coach can see: name, position, jersey number, readiness color, allergies (for team meals) and safety flags (not cleared to play, EpiPen, inhaler). The coach can't see medical details, weight, messages or the full check-in history.\n\nIf you don't recognize this team, open the app, go to Settings, and remove the team.`;
+    await this.mailer.send({ to, subject: `${name} joined ${team.name}`, text, html: text.split("\n\n").map((t) => `<p>${escHtml(t)}</p>`).join("") });
+  }
+
+  /** Readiness board + counts for the coach. */
+  async dashboard(coachOwnerId: string, teamId: string, today: string) {
+    const r = await this.roster(coachOwnerId, teamId, today);
+    if (!r.ok) return r;
+    const players = r.value.players;
+    const count = (st: string) => players.filter((p) => p.checkedInToday && p.readiness?.status === st).length;
+    return {
+      ok: true as const,
+      value: {
+        team: r.value.team,
+        players,
+        summary: {
+          total: players.length,
+          checkedIn: players.filter((p) => p.checkedInToday).length,
+          green: count("ready"), yellow: count("moderate"), red: count("low"),
+          notCleared: players.filter((p) => p.flags.some((f) => f.startsWith("Not cleared"))).map((p) => p.name),
+          out: players.filter((p) => p.flags.includes("Out sick today")).map((p) => p.name),
+        },
+      },
+    };
+  }
+
+  /** One food order that is safe for every player on the roster. */
+  async meal(coachOwnerId: string, teamId: string, gameDay: boolean): Promise<TeamResult<TeamMenu>> {
+    const team = await this.teams.getById(teamId);
+    if (!team) return { ok: false, code: "not_found" };
+    if (team.coachOwnerId !== coachOwnerId) return { ok: false, code: "forbidden" };
+    const members = await this.teams.listMembers(teamId);
+    const roster: AthleteProfile[] = [];
+    for (const m of members) { const p = await this.profiles.getById(m.ownerId, m.profileId); if (p) roster.push(p); }
+    return { ok: true, value: teamMenu(roster, { gameDay }) };
   }
 }

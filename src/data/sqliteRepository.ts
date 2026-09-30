@@ -18,6 +18,8 @@ import type {
   AthleteProfileRepository,
   CheckInRepository,
   TeamRepository,
+  AppRecord,
+  RecordRepository,
 } from "./repository.js";
 
 interface ProfileRow {
@@ -74,6 +76,11 @@ export class SqliteAthleteProfileRepository implements AthleteProfileRepository 
     const row = this.db
       .prepare(`SELECT * FROM athlete_profiles WHERE id = ? AND owner_id = ?`)
       .get(id, ownerId) as ProfileRow | undefined;
+    return row ? this.toProfile(row) : null;
+  }
+
+  async findById(id: string): Promise<AthleteProfile | null> {
+    const row = this.db.prepare(`SELECT * FROM athlete_profiles WHERE id = ?`).get(id) as ProfileRow | undefined;
     return row ? this.toProfile(row) : null;
   }
 
@@ -304,5 +311,42 @@ export class SqliteTeamRepository implements TeamRepository {
     const teams = await this.listByCoach(ownerId);
     for (const t of teams) await this.delete(ownerId, t.id);
     this.db.prepare(`DELETE FROM team_members WHERE owner_id = ?`).run(ownerId);
+  }
+}
+
+interface RecordRow { id: string; kind: string; key: string; owner_id: string; data: string; created_at: string; updated_at: string }
+const toRecord = <T>(r: RecordRow): AppRecord<T> => ({ id: r.id, kind: r.kind, key: r.key, ownerId: r.owner_id, data: JSON.parse(r.data) as T, createdAt: r.created_at, updatedAt: r.updated_at });
+
+export class SqliteRecordRepository implements RecordRepository {
+  constructor(private readonly db: DB) {}
+  async put<T>(rec: Omit<AppRecord<T>, "createdAt" | "updatedAt"> & { createdAt?: string }): Promise<AppRecord<T>> {
+    const now = new Date().toISOString();
+    const prev = this.db.prepare(`SELECT created_at FROM app_records WHERE id = ?`).get(rec.id) as { created_at: string } | undefined;
+    const createdAt = prev?.created_at || rec.createdAt || now;
+    this.db.prepare(`INSERT OR REPLACE INTO app_records (id, kind, key, owner_id, data, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+      .run(rec.id, rec.kind, rec.key, rec.ownerId, JSON.stringify(rec.data), createdAt, now);
+    return { ...rec, createdAt, updatedAt: now };
+  }
+  async get<T>(kind: string, id: string) {
+    const r = this.db.prepare(`SELECT * FROM app_records WHERE kind = ? AND id = ?`).get(kind, id) as RecordRow | undefined;
+    return r ? toRecord<T>(r) : null;
+  }
+  async listByKey<T>(kind: string, key: string) {
+    return (this.db.prepare(`SELECT * FROM app_records WHERE kind = ? AND key = ? ORDER BY created_at`).all(kind, key) as RecordRow[]).map((r) => toRecord<T>(r));
+  }
+  async listByOwner<T>(kind: string, ownerId: string) {
+    return (this.db.prepare(`SELECT * FROM app_records WHERE kind = ? AND owner_id = ? ORDER BY created_at`).all(kind, ownerId) as RecordRow[]).map((r) => toRecord<T>(r));
+  }
+  async listByKind<T>(kind: string, limit = 1000) {
+    return (this.db.prepare(`SELECT * FROM app_records WHERE kind = ? ORDER BY created_at LIMIT ?`).all(kind, limit) as RecordRow[]).map((r) => toRecord<T>(r));
+  }
+  async delete(kind: string, id: string) {
+    return this.db.prepare(`DELETE FROM app_records WHERE kind = ? AND id = ?`).run(kind, id).changes > 0;
+  }
+  async deleteByOwner(ownerId: string) {
+    this.db.prepare(`DELETE FROM app_records WHERE owner_id = ?`).run(ownerId);
+  }
+  async deleteByKey(kind: string, key: string) {
+    this.db.prepare(`DELETE FROM app_records WHERE kind = ? AND key = ?`).run(kind, key);
   }
 }

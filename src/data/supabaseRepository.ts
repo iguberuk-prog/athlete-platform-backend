@@ -26,6 +26,8 @@ import type {
   AthleteProfileRepository,
   CheckInRepository,
   TeamRepository,
+  AppRecord,
+  RecordRepository,
 } from "./repository.js";
 
 const PROFILES = "athlete_profiles";
@@ -82,6 +84,12 @@ export class SupabaseAthleteProfileRepository implements AthleteProfileRepositor
       .eq("id", id)
       .eq("owner_id", ownerId)
       .maybeSingle();
+    if (error) throw error;
+    return data ? (data.data as AthleteProfile) : null;
+  }
+
+  async findById(id: string): Promise<AthleteProfile | null> {
+    const { data, error } = await this.client.from(PROFILES).select("data").eq("id", id).maybeSingle();
     if (error) throw error;
     return data ? (data.data as AthleteProfile) : null;
   }
@@ -349,5 +357,57 @@ export class SupabaseTeamRepository implements TeamRepository {
     if (e1) throw e1;
     const { error: e2 } = await this.client.from(MEMBERS).delete().eq("owner_id", ownerId);
     if (e2) throw e2;
+  }
+}
+
+const RECORDS = "app_records";
+interface SbRecordRow { id: string; kind: string; key: string; owner_id: string; data: unknown; created_at: string; updated_at: string }
+const sbRecord = <T>(r: SbRecordRow): AppRecord<T> => ({ id: r.id, kind: r.kind, key: r.key, ownerId: r.owner_id, data: r.data as T, createdAt: r.created_at, updatedAt: r.updated_at });
+
+export class SupabaseRecordRepository implements RecordRepository {
+  private client: SupabaseClient;
+  constructor(url: string, serviceKey: string) {
+    this.client = makeClient(url, serviceKey);
+  }
+  async put<T>(rec: Omit<AppRecord<T>, "createdAt" | "updatedAt"> & { createdAt?: string }): Promise<AppRecord<T>> {
+    const now = new Date().toISOString();
+    const row: Record<string, unknown> = { id: rec.id, kind: rec.kind, key: rec.key, owner_id: rec.ownerId, data: rec.data, updated_at: now };
+    if (rec.createdAt) row.created_at = rec.createdAt;
+    const { data, error } = await this.client.from(RECORDS).upsert(row).select("*").single();
+    if (error) throw error;
+    return sbRecord<T>(data as SbRecordRow);
+  }
+  async get<T>(kind: string, id: string) {
+    const { data, error } = await this.client.from(RECORDS).select("*").eq("kind", kind).eq("id", id).maybeSingle();
+    if (error) throw error;
+    return data ? sbRecord<T>(data as SbRecordRow) : null;
+  }
+  async listByKey<T>(kind: string, key: string) {
+    const { data, error } = await this.client.from(RECORDS).select("*").eq("kind", kind).eq("key", key).order("created_at");
+    if (error) throw error;
+    return (data as SbRecordRow[]).map((r) => sbRecord<T>(r));
+  }
+  async listByOwner<T>(kind: string, ownerId: string) {
+    const { data, error } = await this.client.from(RECORDS).select("*").eq("kind", kind).eq("owner_id", ownerId).order("created_at");
+    if (error) throw error;
+    return (data as SbRecordRow[]).map((r) => sbRecord<T>(r));
+  }
+  async listByKind<T>(kind: string, limit = 1000) {
+    const { data, error } = await this.client.from(RECORDS).select("*").eq("kind", kind).order("created_at").limit(limit);
+    if (error) throw error;
+    return (data as SbRecordRow[]).map((r) => sbRecord<T>(r));
+  }
+  async delete(kind: string, id: string) {
+    const { data, error } = await this.client.from(RECORDS).delete().eq("kind", kind).eq("id", id).select("id");
+    if (error) throw error;
+    return (data || []).length > 0;
+  }
+  async deleteByOwner(ownerId: string) {
+    const { error } = await this.client.from(RECORDS).delete().eq("owner_id", ownerId);
+    if (error) throw error;
+  }
+  async deleteByKey(kind: string, key: string) {
+    const { error } = await this.client.from(RECORDS).delete().eq("kind", kind).eq("key", key);
+    if (error) throw error;
   }
 }

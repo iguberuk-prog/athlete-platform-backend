@@ -25,6 +25,7 @@ export default async (req: Request, context: Context): Promise<Response> => {
   const profileId = context.params?.profileId;
   const url = new URL(req.url);
   const isRoster = url.pathname.endsWith("/roster");
+  const isSub = /\/(dashboard|meal)$/.test(url.pathname);
 
   try {
     if (!teamId) {
@@ -36,6 +37,14 @@ export default async (req: Request, context: Context): Promise<Response> => {
       }
       return json({ error: "method_not_allowed" }, 405);
     }
+    if (url.pathname.endsWith("/dashboard") && req.method === "GET") {
+      const r = await svc.dashboard(user.id, teamId, dateParam(url, "date", utcToday()));
+      return r.ok ? json(r.value) : fail(r.code, (r as { message?: string }).message);
+    }
+    if (url.pathname.endsWith("/meal") && req.method === "GET") {
+      const r = await svc.meal(user.id, teamId, url.searchParams.get("gameDay") === "1");
+      return r.ok ? json(r.value) : fail(r.code, r.message);
+    }
     if (isRoster && req.method === "GET") {
       const r = await svc.roster(user.id, teamId, dateParam(url, "date", utcToday()));
       return r.ok ? json(r.value) : fail(r.code, r.message);
@@ -44,7 +53,7 @@ export default async (req: Request, context: Context): Promise<Response> => {
       const r = await svc.removePlayer(user.id, teamId, profileId);
       return r.ok ? new Response(null, { status: 204 }) : fail(r.code, r.message);
     }
-    if (!profileId && !isRoster && req.method === "DELETE") {
+    if (!profileId && !isRoster && !isSub && req.method === "DELETE") {
       const r = await svc.remove(user.id, teamId);
       return r.ok ? new Response(null, { status: 204 }) : fail(r.code, r.message);
     }
@@ -55,5 +64,5 @@ export default async (req: Request, context: Context): Promise<Response> => {
 };
 
 export const config: Config = {
-  path: ["/api/teams", "/api/teams/:teamId", "/api/teams/:teamId/roster", "/api/teams/:teamId/members/:profileId"],
+  path: ["/api/teams", "/api/teams/:teamId", "/api/teams/:teamId/roster", "/api/teams/:teamId/dashboard", "/api/teams/:teamId/meal", "/api/teams/:teamId/members/:profileId"],
 };

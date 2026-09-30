@@ -23,7 +23,7 @@ import { effectiveAge } from "./profile.js";
 export type FoodRole =
   | "meal_carb" | "quick_carb" | "in_game" | "halftime" | "breakfast" | "snack"
   | "protein" | "slow_protein" | "recovery" | "fruit" | "veg" | "calcium" | "fluid"
-  | "cooling" | "warm" | "salty";
+  | "cooling" | "warm" | "salty" | "ingredient";
 
 export interface FoodTags {
   allergens?: string[];
@@ -138,6 +138,26 @@ export const FOODS: Food[] = [
   F("greens", "leafy greens", ["veg", "calcium"], { keywords: ["spinach", "greens", "kale"] }),
   F("carrots", "carrots", ["veg", "snack"], { keywords: ["carrot"] }),
   F("broccoli", "broccoli", ["veg"], { highFodmap: true, keywords: ["broccoli"] }),
+  F("peppers", "bell peppers", ["veg"], { keywords: ["pepper"] }),
+  F("cucumber", "cucumber", ["veg", "snack"], { keywords: ["cucumber"] }),
+  F("tomato", "tomatoes", ["veg"], { keywords: ["tomato"] }),
+  // recipe ingredients (never suggested on their own)
+  F("olive_oil", "olive oil", ["ingredient"], { keywords: ["olive oil"] }),
+  F("butter", "butter", ["ingredient"], { ...MILK, lactose: false, keywords: ["butter", "dairy"] }),
+  F("tomato_sauce", "tomato sauce", ["ingredient"], { keywords: ["tomato"] }),
+  F("garlic_onion", "garlic and onion", ["ingredient"], { highFodmap: true, keywords: ["garlic", "onion"] }),
+  F("flour_tortilla", "flour tortillas", ["ingredient"], { ...WHEAT, keywords: ["tortilla"] }),
+  F("soy_sauce", "soy sauce", ["ingredient"], { allergens: ["soy", "wheat", "gluten"], gluten: true, keywords: ["soy sauce", "soy"] }),
+  F("tamari", "gluten-free tamari", ["ingredient"], { allergens: ["soy"], keywords: ["tamari", "soy"] }),
+  F("coconut_aminos", "coconut aminos", ["ingredient"], { keywords: ["coconut aminos"] }),
+  F("maple", "maple syrup", ["ingredient"], { keywords: ["maple"] }),
+  F("cinnamon", "cinnamon", ["ingredient"], { keywords: ["cinnamon"] }),
+  F("flour", "flour", ["ingredient"], { ...WHEAT, keywords: ["flour"] }),
+  F("gf_flour", "gluten-free flour", ["ingredient"], { keywords: ["flour"] }),
+  F("parmesan", "parmesan", ["ingredient"], { allergens: ["milk"], animal: true, keywords: ["parmesan", "cheese", "dairy"] }),
+  F("chia", "chia seeds", ["ingredient"], { keywords: ["chia", "seed"] }),
+  F("spices", "salt, pepper and mild spices", ["ingredient"], { keywords: [] }),
+  F("lemon", "lemon", ["ingredient"], { keywords: ["lemon", "citrus"] }),
 ];
 
 const byId = new Map(FOODS.map((f) => [f.id, f]));

@@ -42,7 +42,36 @@ export interface WeatherHour {
   wbgtF: number | null;
   windMph: number | null;
   precipPct: number | null;
+  /** Chance of thunder, %, from the NWS grid. */
+  thunderPct?: number | null;
+  /** US AQI (0-500). */
+  aqi?: number | null;
 }
+
+/** An active National Weather Service alert at the location. */
+export interface WxAlert {
+  event: string;
+  severity: string;
+  headline: string;
+  ends?: string;
+}
+
+export type AirLevel = "good" | "moderate" | "sensitive" | "unhealthy" | "very_unhealthy" | "hazardous";
+
+export function airLevel(aqi: number | null | undefined): AirLevel | null {
+  if (aqi === null || aqi === undefined || !Number.isFinite(aqi)) return null;
+  if (aqi <= 50) return "good";
+  if (aqi <= 100) return "moderate";
+  if (aqi <= 150) return "sensitive";
+  if (aqi <= 200) return "unhealthy";
+  if (aqi <= 300) return "very_unhealthy";
+  return "hazardous";
+}
+
+const AIR_LABEL: Record<AirLevel, string> = {
+  good: "Air good", moderate: "Air moderate", sensitive: "Air unhealthy for sensitive groups",
+  unhealthy: "Air unhealthy", very_unhealthy: "Air very unhealthy", hazardous: "Air hazardous",
+};
 
 export type HeatFlag = "green" | "yellow" | "orange" | "red" | "black";
 export type ColdLevel = "none" | "cool" | "cold" | "very_cold" | "extreme";
@@ -60,6 +89,13 @@ export interface Conditions {
   rainChance: number | null;
   heat: HeatFlag | null;
   cold: ColdLevel;
+  /** Highest chance of thunder in the window, %. */
+  thunderPct: number | null;
+  /** Worst US AQI in the window. */
+  maxAqi: number | null;
+  air: AirLevel | null;
+  /** Active NWS alerts that matter for outdoor play. */
+  alerts: WxAlert[];
   /** One line for the UI: "88°F, feels 96°F · Heat flag: orange". */
   headline: string;
 }
@@ -80,6 +116,8 @@ export interface WeatherPlan {
   warnings: string[];
   /** Food roles to lean on (for pickers): "cooling" or "warm". */
   foodRole: "cooling" | "warm" | null;
+  /** Lightning risk for the window. */
+  lightning: "none" | "possible" | "likely";
 }
 
 const r1 = (n: number) => Math.round(n * 10) / 10;
@@ -107,7 +145,7 @@ export function coldLevel(feelsF: number | null): ColdLevel {
 const nums = (xs: (number | null)[]) => xs.filter((x): x is number => typeof x === "number" && Number.isFinite(x));
 
 /** Summarize the hours between `from` and `to` (local "YYYY-MM-DDTHH:MM"). */
-export function summarize(zip: string, hours: WeatherHour[], from: string, to: string, place?: string): Conditions | null {
+export function summarize(zip: string, hours: WeatherHour[], from: string, to: string, place?: string, alerts: WxAlert[] = []): Conditions | null {
   const fromH = from.slice(0, 13);
   const toH = to.slice(0, 13);
   const win = hours.filter((h) => h.time.slice(0, 13) >= fromH && h.time.slice(0, 13) <= toH);
@@ -125,11 +163,18 @@ export function summarize(zip: string, hours: WeatherHour[], from: string, to: s
   const tempF: [number, number] | null = t.length ? [Math.round(Math.min(...t)), Math.round(Math.max(...t))] : null;
   const feelsF: [number, number] | null = f.length ? [Math.round(Math.min(...f)), Math.round(Math.max(...f))] : null;
   const rainChance = rain.length ? Math.max(...rain) : null;
+  const th = nums(win.map((h) => h.thunderPct ?? null));
+  const aq = nums(win.map((h) => h.aqi ?? null));
+  const thunderPct = th.length ? Math.max(...th) : null;
+  const maxAqi = aq.length ? Math.round(Math.max(...aq)) : null;
+  const air = airLevel(maxAqi);
   const bits: string[] = [];
   if (tempF) bits.push(tempF[0] === tempF[1] ? `${tempF[1]}°F` : `${tempF[0]}-${tempF[1]}°F`);
   if (feelsF && tempF && Math.abs(feelsF[1] - tempF[1]) >= 3 && heat && heat !== "green") bits.push(`feels ${feelsF[1]}°F`);
   if (feelsF && tempF && Math.abs(feelsF[0] - tempF[0]) >= 3 && cold !== "none") bits.push(`feels ${feelsF[0]}°F`);
   if (rainChance !== null && rainChance >= 40) bits.push(`${Math.round(rainChance)}% rain`);
+  if (thunderPct !== null && thunderPct >= 15) bits.push(`${Math.round(thunderPct)}% thunder`);
+  if (air && air !== "good" && air !== "moderate") bits.push(`${AIR_LABEL[air]} (AQI ${maxAqi})`);
   let tag = "";
   if (heat && heat !== "green") tag = ` · Heat flag: ${heat}`;
   else if (cold !== "none") tag = ` · ${cold === "very_cold" ? "Very cold" : cold === "extreme" ? "Extreme cold" : cold === "cold" ? "Cold" : "Cool"}`;
@@ -137,7 +182,9 @@ export function summarize(zip: string, hours: WeatherHour[], from: string, to: s
     zip, place, from, to, tempF, feelsF, maxWbgtF: maxW === null ? null : r1(maxW),
     humidity: hum.length ? Math.round(Math.max(...hum)) : null,
     windMph: wind.length ? Math.round(Math.max(...wind)) : null,
-    rainChance, heat, cold,
+    rainChance, heat, cold, thunderPct, maxAqi, air,
+    // NWS timestamps carry the local offset, so the wall-clock prefix compares with the window.
+    alerts: relevantAlerts(alerts.filter((a) => !a.ends || a.ends.slice(0, 13) >= fromH)),
     headline: bits.join(", ") + tag,
   };
 }
@@ -147,7 +194,12 @@ export function summarize(zip: string, hours: WeatherHour[], from: string, to: s
  * `kid` = under 13 (advice is written for the parent), `M` = body mass kg,
  * `durationMin` = time exposed (game or practice length).
  */
-export function weatherPlan(c: Conditions, opts: { M: number; kid: boolean; young: boolean; durationMin: number; name?: string }): WeatherPlan {
+const ALERT_WORDS = /(heat|thunder|tornado|lightning|wind chill|cold|freeze|air quality|smoke|flood|storm|hurricane|blizzard|winter|ice|excessive)/i;
+export function relevantAlerts(alerts: WxAlert[]): WxAlert[] {
+  return alerts.filter((a) => ALERT_WORDS.test(a.event)).slice(0, 3);
+}
+
+export function weatherPlan(c: Conditions, opts: { M: number; kid: boolean; young: boolean; durationMin: number; name?: string; asthma?: boolean }): WeatherPlan {
   const { M, kid, young } = opts;
   const hrs = Math.max(0.5, opts.durationMin / 60);
   const actions: string[] = [];
@@ -253,12 +305,41 @@ export function weatherPlan(c: Conditions, opts: { M: number; kid: boolean; youn
     packing.push("Spare dry shirt and socks");
   }
 
-  return { conditions: c, severity, extraFluidL, extraCarbsPerKg, preHydrateMl, inGameLph: inGame, actions, packing, warnings, foodRole };
+  // Lightning: NWS thunder chance plus any storm alert.
+  const stormAlert = c.alerts.some((a) => /thunder|tornado|lightning/i.test(a.event));
+  const lightning: WeatherPlan["lightning"] = stormAlert || (c.thunderPct ?? 0) >= 40 ? "likely" : (c.thunderPct ?? 0) >= 15 ? "possible" : "none";
+  if (lightning !== "none") {
+    if (lightning === "likely" && RANK[severity] < 2) severity = "high";
+    else if (severity === "none") severity = "moderate";
+    warnings.push("Lightning rule: if you hear thunder or see lightning, get off the field right away into a building or a hard-top car. Not under a tree, not in a dugout or tent. Wait 30 minutes after the last thunder before going back out.");
+    actions.push(lightning === "likely" ? "Storms likely: check with the coach before leaving, and know where the nearest building or car is." : "Storms possible: keep an eye on the sky, and know where the nearest building or car is.");
+  }
+
+  // Air quality (wildfire smoke, ozone).
+  if (c.air === "sensitive") {
+    if (opts.asthma || opts.young) {
+      severity = RANK[severity] < 2 ? "high" : severity;
+      actions.push(opts.asthma ? "Air is unhealthy for people with asthma: keep the inhaler on the bench, go easier, and stop at the first wheeze or tight chest." : "Air is unhealthy for kids: shorter, easier play and more breaks.");
+    } else {
+      severity = severity === "none" ? "moderate" : severity;
+      actions.push("Air quality is poor: take more breaks and ease off if breathing feels hard.");
+    }
+  } else if (c.air === "unhealthy") {
+    severity = RANK[severity] < 2 ? "high" : severity;
+    warnings.push(`Unhealthy air (AQI ${c.maxAqi}). Most leagues move practice indoors or cut it short. ${opts.asthma ? "With asthma, skip hard outdoor training today." : "Easy activity only."}`);
+  } else if (c.air === "very_unhealthy" || c.air === "hazardous") {
+    severity = "extreme";
+    warnings.push(`Very unhealthy air (AQI ${c.maxAqi}). No outdoor training or games. Stay inside with windows closed.`);
+  }
+
+  for (const a of c.alerts) warnings.push(`Weather alert: ${a.event}.`);
+
+  return { conditions: c, severity, extraFluidL, extraCarbsPerKg, preHydrateMl, inGameLph: inGame, actions, packing, warnings, foodRole, lightning };
 }
 
 /** Hourly forecasts keyed by ZIP code, plus place names. */
 export interface WeatherIndex {
-  byZip: Record<string, { place?: string; hours: WeatherHour[] }>;
+  byZip: Record<string, { place?: string; hours: WeatherHour[]; timeZone?: string; alerts?: WxAlert[] }>;
 }
 
 export function hoursFor(wx: WeatherIndex | undefined, zip: string | undefined) {
@@ -272,7 +353,7 @@ export function hoursFor(wx: WeatherIndex | undefined, zip: string | undefined) 
 
 
 export const durationOf = (profile: AthleteProfile, e: ScheduledEvent) =>
-  e.type === "match" ? 110 : profile.training?.avgSessionMinutes || 90;
+  e.durationMin || (e.type === "match" ? 110 : profile.training?.avgSessionMinutes || 90);
 
 export function zipFor(profile: AthleteProfile, e?: ScheduledEvent): string | undefined {
   return e?.zip || profile.routine?.homeZip;
@@ -284,7 +365,7 @@ export function eventConditions(profile: AthleteProfile, e: ScheduledEvent, wx?:
   const f = hoursFor(wx, zip);
   if (!f || !zip) return null;
   const start = `${eventDate(e)}T${eventTime(e, routineOf(profile).practice)}`;
-  return summarize(zip, f.hours, start, shiftLocal(eventDate(e), eventTime(e, routineOf(profile).practice), durationOf(profile, e)), f.place);
+  return summarize(zip, f.hours, start, shiftLocal(eventDate(e), eventTime(e, routineOf(profile).practice), durationOf(profile, e)), f.place, f.alerts);
 }
 
 export function planOptsFor(profile: AthleteProfile, durationMin: number) {
@@ -295,6 +376,7 @@ export function planOptsFor(profile: AthleteProfile, durationMin: number) {
     young: age !== undefined && age < 15,
     durationMin,
     name: (profile.identity.fullName || "").trim().split(/\s+/)[0],
+    asthma: !!profile.health?.asthma?.has,
   };
 }
 
@@ -316,7 +398,7 @@ export function dayWeatherPlan(profile: AthleteProfile, date: string, wx?: Weath
   const zip = profile.routine?.homeZip;
   const f = hoursFor(wx, zip);
   if (!f || !zip) return null;
-  const c = summarize(zip, f.hours, `${date}T12:00`, `${date}T18:00`, f.place);
+  const c = summarize(zip, f.hours, `${date}T12:00`, `${date}T18:00`, f.place, f.alerts);
   if (!c) return null;
   const p = weatherPlan(c, planOptsFor(profile, 60));
   // A rest day only needs the fluid part, softened.

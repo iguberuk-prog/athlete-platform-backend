@@ -12,7 +12,7 @@
 import type { Config, Context } from "@netlify/functions";
 import { verifyUser } from "../../src/auth.js";
 import { errorResponse } from "../../src/http.js";
-import { getPlanService } from "../../src/container.js";
+import { getPlanService, getFamilyService } from "../../src/container.js";
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body, null, 2), {
@@ -23,14 +23,16 @@ function json(body: unknown, status = 200): Response {
 
 
 export default async (req: Request, context: Context): Promise<Response> => {
-  const ownerId = (await verifyUser(req))?.id ?? null;
-  if (!ownerId) {
+  const userId = (await verifyUser(req))?.id ?? null;
+  if (!userId) {
     return json({ error: "unauthorized", message: "Please sign in." }, 401);
   }
   if (req.method !== "GET") return json({ error: "method_not_allowed" }, 405);
 
   const id = context.params?.id;
   if (!id) return json({ error: "profile id required in path" }, 400);
+  // The owner, or a linked parent/player (family link). Unknown -> not found.
+  const ownerId = (await getFamilyService().ownerFor(userId, id)) ?? "__none__";
 
   const url = new URL(req.url);
   const date = url.searchParams.get("date") || new Date().toISOString().slice(0, 10);

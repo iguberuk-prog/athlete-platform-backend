@@ -13,7 +13,7 @@
  */
 
 import ZIPS from "../data/zipCentroids.js";
-import type { WeatherHour } from "../domain/weather.js";
+import type { WeatherHour, WxAlert } from "../domain/weather.js";
 
 let CENTROIDS: Record<string, [number, number]> | null = null;
 function centroids(): Record<string, [number, number]> {
@@ -38,6 +38,7 @@ export interface Forecast {
   place?: string;
   timeZone: string;
   hours: WeatherHour[];
+  alerts?: WxAlert[];
 }
 
 export interface WeatherProvider {
@@ -113,6 +114,11 @@ export class NwsProvider implements WeatherProvider {
       const wbgt = expand(g.wetBulbGlobeTemperature, cToF);
       const wind = expand(g.windSpeed, kmhToMph);
       const pop = expand(g.probabilityOfPrecipitation, (v) => v);
+      const thunder = expand(g.probabilityOfThunder, (v) => v);
+      const [alerts, air] = await Promise.all([
+        nwsAlerts(ll[0], ll[1]),
+        airQuality ? airQuality.hourly(ll[0], ll[1]).catch(() => null) : Promise.resolve(null),
+      ]);
       const now = Date.now() - 3_600_000;
       const hours: WeatherHour[] = [...temp.keys()]
         .filter((ms) => ms >= now)
@@ -125,8 +131,10 @@ export class NwsProvider implements WeatherProvider {
           wbgtF: wbgt.get(ms) ?? null,
           windMph: wind.get(ms) ?? null,
           precipPct: pop.get(ms) ?? null,
+          thunderPct: thunder.get(ms) ?? null,
+          aqi: air?.get(ms) ?? null,
         }));
-      const v: Forecast = { zip, place: pt.v.place, timeZone: pt.v.timeZone, hours };
+      const v: Forecast = { zip, place: pt.v.place, timeZone: pt.v.timeZone, hours, alerts };
       fcCache.set(zip, { at: Date.now(), v });
       return v;
     } catch (err) {
@@ -135,6 +143,59 @@ export class NwsProvider implements WeatherProvider {
     }
   }
 }
+
+/** Active NWS alerts at a point. Never throws. */
+async function nwsAlerts(lat: number, lon: number): Promise<WxAlert[]> {
+  try {
+    const j = await getJson(`https://api.weather.gov/alerts/active?point=${lat},${lon}`, 4000);
+    return (j.features || []).map((f: any) => ({
+      event: String(f.properties?.event || ""),
+      severity: String(f.properties?.severity || ""),
+      headline: String(f.properties?.headline || f.properties?.event || ""),
+      ends: f.properties?.ends || f.properties?.expires || undefined,
+    })).filter((a: WxAlert) => a.event);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Air quality source. Open-Meteo (free, no key) by default. AirNow's ZIP and
+ * lat/lon endpoints are being retired in fall 2026, so it is not the default;
+ * another source can be plugged in by implementing this interface.
+ * Set AIR_QUALITY=off to disable.
+ */
+export interface AirQualityProvider {
+  /** US AQI keyed by UTC hour (ms). */
+  hourly(lat: number, lon: number): Promise<Map<number, number> | null>;
+}
+
+export class OpenMeteoAir implements AirQualityProvider {
+  async hourly(lat: number, lon: number): Promise<Map<number, number> | null> {
+    const ctl = new AbortController();
+    const t = setTimeout(() => ctl.abort(), 4000);
+    try {
+      const res = await fetch(
+        `https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${lat}&longitude=${lon}&hourly=us_aqi&timezone=GMT&forecast_days=5`,
+        { signal: ctl.signal },
+      );
+      if (!res.ok) return null;
+      const j: any = await res.json();
+      const out = new Map<number, number>();
+      (j.hourly?.time || []).forEach((tm: string, i: number) => {
+        const v = j.hourly.us_aqi?.[i];
+        if (typeof v === "number") out.set(Date.parse(tm + ":00Z"), v);
+      });
+      return out;
+    } catch {
+      return null;
+    } finally {
+      clearTimeout(t);
+    }
+  }
+}
+
+const airQuality: AirQualityProvider | null = process.env.AIR_QUALITY === "off" ? null : new OpenMeteoAir();
 
 /** For tests and local dev without network. */
 export class StaticProvider implements WeatherProvider {
@@ -165,6 +226,8 @@ export class DemoProvider implements WeatherProvider {
         wbgtF: hot ? (day ? 86.8 : 76) : cold ? 18 : 62,
         windMph: cold ? 14 : 5,
         precipPct: cold ? 30 : 5,
+        thunderPct: hot && d.getHours() >= 16 && d.getHours() <= 19 ? 35 : 0,
+        aqi: hot ? 115 : 35,
       });
     }
     return { zip, place: hot ? "Roseland, NJ (demo heat)" : cold ? "Princeton, NJ (demo cold)" : "Demo", timeZone: "America/New_York", hours };

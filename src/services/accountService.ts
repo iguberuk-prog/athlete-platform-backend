@@ -6,7 +6,7 @@
  * The HTTP layer then deletes the login itself from Supabase Auth.
  */
 
-import type { AthleteProfileRepository, CheckInRepository, TeamRepository } from "../data/repository.js";
+import type { AthleteProfileRepository, CheckInRepository, RecordRepository, TeamRepository } from "../data/repository.js";
 
 export interface DeletionReport {
   profiles: number;
@@ -18,6 +18,7 @@ export class AccountService {
     private readonly profiles: AthleteProfileRepository,
     private readonly checkins: CheckInRepository,
     private readonly teams: TeamRepository,
+    private readonly records?: RecordRepository,
   ) {}
 
   async deleteAllData(ownerId: string): Promise<DeletionReport> {
@@ -26,8 +27,12 @@ export class AccountService {
     let checkins = 0;
     for (const p of list) {
       checkins += await this.checkins.deleteByProfile(ownerId, p.id);
+      // Links, invites and device connections for this profile go too.
+      if (this.records) for (const k of ["link", "invite", "integration"]) await this.records.deleteByKey(k, p.id);
       await this.profiles.delete(ownerId, p.id);
     }
+    // Everything this account holds: its links to other profiles, usage counters, etc.
+    if (this.records) await this.records.deleteByOwner(ownerId);
     return { profiles: list.length, checkins };
   }
 }

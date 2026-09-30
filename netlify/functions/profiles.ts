@@ -15,8 +15,19 @@
 import type { Config, Context } from "@netlify/functions";
 import { verifyUser } from "../../src/auth.js";
 import { errorResponse } from "../../src/http.js";
-import { getProfileService } from "../../src/container.js";
-import { effectiveAge, type ProfileInput } from "../../src/domain/profile.js";
+import { getProfileService, getFamilyService } from "../../src/container.js";
+import { effectiveAge, type AthleteProfile, type ProfileInput } from "../../src/domain/profile.js";
+import { featuresFor } from "../../src/domain/features.js";
+
+/** Drop display-only fields the app may send back. */
+function clean(input: ProfileInput): ProfileInput {
+  const x = { ...(input as unknown as Record<string, unknown>) };
+  for (const k of ["features", "featuresOff", "shared", "linkRole", "id", "ownerId", "createdAt", "updatedAt"]) delete x[k];
+  return x as unknown as ProfileInput;
+}
+
+/** Attach the age-based feature switches so the app shows the right screens. */
+const withFeatures = <T extends AthleteProfile>(p: T) => { const f = featuresFor(p); return { ...p, features: f.on, featuresOff: f.off }; };
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body, null, 2), {
@@ -61,11 +72,11 @@ export default async (req: Request, context: Context): Promise<Response> => {
   try {
     switch (req.method) {
       case "POST": {
-        const input = (await req.json()) as ProfileInput;
+        const input = clean((await req.json()) as ProfileInput);
         const young = under13(user?.role, input);
         if (young) return young;
         const result = await service.create(ownerId, input);
-        if (result.ok) return json(result.value, 201);
+        if (result.ok) return json(withFeatures(result.value), 201);
         return result.code === "validation"
           ? json({ error: "validation_failed", details: result.errors }, 422)
           : json({ error: "not_found" }, 404);
@@ -73,20 +84,23 @@ export default async (req: Request, context: Context): Promise<Response> => {
 
       case "GET": {
         if (id) {
-          const result = await service.get(ownerId, id);
-          return result.ok ? json(result.value) : json({ error: "not_found" }, 404);
+          const owner = (await getFamilyService().ownerFor(ownerId, id)) ?? "__none__";
+          const result = await service.get(owner, id);
+          return result.ok ? json({ ...withFeatures(result.value), shared: owner !== ownerId }) : json({ error: "not_found" }, 404);
         }
-        const profiles = await service.list(ownerId);
-        return json({ profiles });
+        const own = await service.list(ownerId);
+        // Profiles shared with this account through a family link.
+        const linked = (await getFamilyService().linkedProfiles(ownerId)).map((p) => ({ ...p, shared: true }));
+        return json({ profiles: [...own, ...linked].map(withFeatures) });
       }
 
       case "PUT": {
         if (!id) return json({ error: "id required in path" }, 400);
-        const input = (await req.json()) as ProfileInput;
+        const input = clean((await req.json()) as ProfileInput);
         const young = under13(user?.role, input);
         if (young) return young;
         const result = await service.update(ownerId, id, input);
-        if (result.ok) return json(result.value);
+        if (result.ok) return json(withFeatures(result.value));
         return result.code === "validation"
           ? json({ error: "validation_failed", details: result.errors }, 422)
           : json({ error: "not_found" }, 404);

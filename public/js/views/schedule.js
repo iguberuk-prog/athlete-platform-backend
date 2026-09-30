@@ -5,7 +5,8 @@ import { api, errText } from "../api.js";
 import { active, loadProfiles, render as rerender, syncReminders, isCoach } from "../app.js";
 import { lookupZip } from "./profile.js";
 
-const LABEL = { match: "Game", training: "Practice", recovery: "Recovery", travel: "Travel" };
+const LABEL = { match: "Game", training: "Practice", recovery: "Recovery", travel: "Travel", tournament: "Tournament" };
+const ADD_LABEL = { match: "Game", training: "Practice", recovery: "Recovery", travel: "Travel" };
 
 export async function render(el, ctx) {
   const p = ctx.profile;
@@ -21,10 +22,24 @@ export async function render(el, ctx) {
   const pre = ctx.query.add || "match";
   const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
+  const feeds = p.schedule?.feeds || [];
   el.innerHTML = `
+    <div class="card">
+      <h2>Team calendars</h2>
+      <p class="sub">Copy the "subscribe" or "export calendar" link from TeamSnap, SportsEngine, PlayMetrics, GameChanger, LeagueApps, Heja, Spond or Google Calendar. Games and practices come in on their own and stay up to date. On two teams? Add both.</p>
+      ${feeds.map((f) => `<div class="feed"><div style="flex:1;min-width:0"><div class="rowtitle">${esc(f.name || "Team calendar")}</div>
+        <div class="rowsub">${f.lastError ? `Problem: ${esc(f.lastError)}` : f.lastSyncedAt ? `${f.eventCount ?? 0} events · synced ${esc(new Date(f.lastSyncedAt).toLocaleString())}` : "Not synced yet"}</div></div>
+        <button class="btn ghost sm" data-act="feedDel" data-id="${esc(f.id)}">Remove</button></div>`).join("")}
+      <form data-submit="feedAdd" novalidate>
+        <input class="input" id="feedUrl" placeholder="webcal://… or https://….ics" autocomplete="off" inputmode="url">
+        <div class="row2" style="margin-top:8px"><input class="input" id="feedName" placeholder="Name (e.g. Club team)"><input class="input" id="feedZip" inputmode="numeric" maxlength="5" placeholder="Usual field ZIP"></div>
+        <div class="actions"><button class="btn primary" type="submit">Add calendar</button>${feeds.length ? `<button class="btn ghost" type="button" data-act="feedSync">Sync now</button>` : ""}</div>
+      </form>
+    </div>
+
     <form class="card" data-submit="addEvent" novalidate>
       <h2>Add to schedule</h2>
-      <div class="seg" style="margin:8px 0 4px" id="evType">${Object.entries(LABEL).map(([v, l]) => `<button type="button" class="${v === pre ? "on" : ""}" data-act="evType" data-v="${v}">${l}</button>`).join("")}</div>
+      <div class="seg" style="margin:8px 0 4px" id="evType">${Object.entries(ADD_LABEL).map(([v, l]) => `<button type="button" class="${v === pre ? "on" : ""}" data-act="evType" data-v="${v}">${l}</button>`).join("")}</div>
       <div class="row2">
         <div><label class="f" for="evDate">Date</label><input class="input" id="evDate" type="date" value="${today}"></div>
         <div><label class="f" for="evTime">${pre === "match" ? "Kickoff" : "Start"}</label><input class="input" id="evTime" type="time" value="${pre === "training" ? p.routine?.usualPracticeTime || "17:00" : "10:00"}"></div>
@@ -50,10 +65,10 @@ export async function render(el, ctx) {
       <div class="card tight">
         <div class="eyebrow">${esc(relDay(d))}${relDay(d) !== niceDate(d) ? " · " + esc(niceDate(d)) : ""}</div>
         <ul class="list">${list.map((e) => `<li>
-          <span class="time">${esc(to12(e.startTime.slice(11, 16)))}</span>
-          <div style="flex:1"><span class="kind ${e.type}">${esc(LABEL[e.type] || e.type)}</span>${e.conditions ? ` <span class="rowsub">${esc(e.conditions)}</span>` : ""}${e.zip ? ` <span class="rowsub">· ZIP ${esc(e.zip)}</span>` : ""}
+          <span class="time">${e.startTime.length > 10 ? esc(to12(e.startTime.slice(11, 16))) : "All day"}</span>
+          <div style="flex:1"><span class="kind ${e.type}">${esc(LABEL[e.type] || e.type)}</span>${e.title ? ` <b>${esc(e.title)}</b>` : ""}${e.conditions ? ` <span class="rowsub">${esc(e.conditions)}</span>` : ""}${e.zip ? ` <span class="rowsub">· ZIP ${esc(e.zip)}</span>` : ""}
             ${e.type === "match" ? `<div><button class="btn link sm" data-act="nav" data-to="#/gameday?date=${d}&kickoff=${e.startTime.slice(11, 16)}">Game-day plan ›</button></div>` : ""}</div>
-          <button class="btn ghost sm" data-act="delEvent" data-st="${esc(e.startTime)}" data-type="${e.type}" aria-label="Remove">Remove</button>
+          ${e.source && e.source !== "manual" ? `<span class="rowsub">from calendar</span>` : `<button class="btn ghost sm" data-act="delEvent" data-st="${esc(e.startTime)}" data-type="${e.type}" aria-label="Remove">Remove</button>`}
         </li>`).join("")}</ul>
       </div>`).join("") : `<div class="card empty"><p>Nothing coming up. Add your next game or practice above.</p></div>`}`;
 
@@ -68,7 +83,22 @@ export async function render(el, ctx) {
   $("#evZip").addEventListener("input", (e) => lookupZip(e.target.value, "#evZipPlace"));
 }
 
+async function feedDone(r, text) {
+  if (!r.ok) return toast(errText(r));
+  toast(text);
+  await loadProfiles(); await rerender(); syncReminders();
+}
+
 export const actions = {
+  async feedAdd() {
+    const url = $("#feedUrl").value.trim();
+    if (!url) return toast("Paste the calendar link first.");
+    const r = await api(`/api/profiles/${active().id}/calendars`, { method: "POST", body: { url, name: $("#feedName").value.trim() || undefined, defaultZip: $("#feedZip").value.trim() || undefined } });
+    const f = r.ok ? r.data.schedule.feeds.at(-1) : null;
+    await feedDone(r, f?.lastError ? `Added, but: ${f.lastError}` : `Added ${f?.eventCount ?? 0} games and practices`);
+  },
+  async feedSync() { await feedDone(await api(`/api/profiles/${active().id}/calendars/sync`, { method: "POST" }), "Calendars synced"); },
+  async feedDel(btn) { await feedDone(await api(`/api/profiles/${active().id}/calendars/${btn.dataset.id}`, { method: "DELETE" }), "Calendar removed"); },
   evType(btn) {
     $("#view").dataset.type = btn.dataset.v;
     btn.parentElement.querySelectorAll("button").forEach((b) => b.classList.toggle("on", b === btn));

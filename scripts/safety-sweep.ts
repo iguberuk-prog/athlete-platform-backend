@@ -10,6 +10,10 @@
  *   npm test   (runs after the main suite)
  */
 
+import { buildMealPlan, eatingOutGuide, safeRecipes } from "../src/domain/meals.js";
+import { buildHealthStatus } from "../src/domain/health.js";
+import { schoolDayPlan, travelPlans } from "../src/domain/dayplans.js";
+import { teamMenu } from "../src/domain/teamMeal.js";
 import type { AthleteProfile, ProfileInput } from "../src/domain/profile.js";
 import { buildMatchDayPlan } from "../src/domain/plan.js";
 import { buildGameDayTimeline } from "../src/domain/timeline.js";
@@ -72,7 +76,7 @@ function wxHours(): WeatherHour[] {
 const WX: WeatherIndex = { byZip: { "07039": { place: "Roseland, NJ", hours: wxHours() } } };
 
 /** Drop "avoid" lists: they're SUPPOSED to name the allergen ("Always avoiding: peanut"). */
-const noAvoidLists = (_k: string, v: unknown) => (_k === "safety" || _k === "avoid" ? undefined : v);
+const noAvoidLists = (_k: string, v: unknown) => (["safety", "avoid", "ask", "general", "features", "dangerSigns", "returnSteps", "id"].includes(_k) ? undefined : v);
 
 /** Everything the app can show for this athlete, as one string. */
 function allText(p: AthleteProfile, withProgram = true): string {
@@ -100,6 +104,13 @@ function allText(p: AthleteProfile, withProgram = true): string {
     out.push(buildGroceryList(p, addDays(START, 7), 7, weather));
     for (let i = 0; i < 14; i++) out.push(buildToday(p, addDays(START, i), null, weather));
   }
+  // New: meals, eating out, health, school day, travel, team menu.
+  const withSchool = { ...p, routine: { ...(p.routine || {}), homeZip: "07039", school: { days: [1, 2, 3, 4, 5], start: "08:00", end: "15:00", lunch: "11:30" } } } as AthleteProfile;
+  out.push(buildMealPlan(p, START, 7), buildMealPlan(p, addDays(START, 3), 7), safeRecipes(p), eatingOutGuide(p));
+  out.push(buildHealthStatus(p, [], addDays(START, 2)));
+  for (let i = 0; i < 7; i++) out.push(schoolDayPlan(withSchool, addDays(START, i)));
+  out.push(travelPlans({ ...withSchool, schedule: { events: [...(p.schedule?.events || []), { type: "tournament", startTime: `${addDays(START, 4)}T09:00`, importance: "high", zip: "90210" }] } } as AthleteProfile, START, WX));
+  out.push(teamMenu([p]), teamMenu([p], { gameDay: true }));
   // The program's safety summary and "avoid" lists intentionally name excluded foods; scan the rest.
   if (withProgram) out.push(buildProgram(p));
   return JSON.stringify(out, noAvoidLists);
@@ -185,6 +196,15 @@ for (const [dob, age] of AGES) {
   }
   if (Number(age) < 13) check(`age ${age}: reminders speak to the parent`, buildReminders(p, { from: START, days: 7 }).some((r) => /Test's|for Test/.test(r.title + r.body)));
   check(`age ${age}: program is ${band.name}`, buildProgram(p).band.id === band.id);
+}
+
+// The sweep must really be scanning the new screens.
+{
+  const t = allText(athlete("2010-01-15", {}, 60)).toLowerCase();
+  check("sweep covers meal plan", t.includes("overnight oats") || t.includes("rice bowl"));
+  check("sweep covers eating out", t.includes("burger place"));
+  check("sweep covers school day", t.includes("mid-morning snack") || t.includes("pre-practice snack"));
+  check("sweep covers travel", t.includes("cooler"));
 }
 
 // The sweep must really be scanning weather text.

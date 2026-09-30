@@ -40,7 +40,7 @@ import {
   WEARABLES,
 } from "./enums.js";
 import { effectiveAge, type ProfileInput } from "./profile.js";
-import type { CheckInInput } from "./checkin.js";
+import { BODY_REGIONS, CYCLE_SYMPTOMS, type CheckInInput } from "./checkin.js";
 
 export interface ValidationError {
   path: string;
@@ -322,7 +322,26 @@ function validateHealth(errors: ValidationError[], input: ProfileInput): void {
   if (h.medications !== undefined) arrayCheck(errors, "health.medications", h.medications, false);
   if (h.recentIllnessStatus !== undefined)
     enumCheck(errors, "health.recentIllnessStatus", h.recentIllnessStatus, ILLNESS_STATUSES, false);
+  if (h.asthma !== undefined) {
+    const a = h.asthma as unknown as Record<string, unknown>;
+    if (!a || typeof a !== "object" || !isBool(a.has)) errors.push({ path: "health.asthma.has", message: "must be a boolean" });
+    else {
+      if (a.preExerciseInhaler !== undefined && !isBool(a.preExerciseInhaler))
+        errors.push({ path: "health.asthma.preExerciseInhaler", message: "must be a boolean" });
+      if (a.triggers !== undefined) arrayCheck(errors, "health.asthma.triggers", a.triggers, false, (v, i) => {
+        if (!isNonEmptyString(v) || v.length > 60) errors.push({ path: `health.asthma.triggers[${i}]`, message: "must be short text" });
+      });
+    }
+  }
+  if (h.concussions !== undefined)
+    arrayCheck(errors, "health.concussions", h.concussions, false, (v, i) => {
+      const c = v as Record<string, unknown>;
+      if (!c || !isNonEmptyString(c.id) || !isDay(c.date) || !isNumber(c.step) || (c.step as number) < 0 || (c.step as number) > 6)
+        errors.push({ path: `health.concussions[${i}]`, message: "needs id, date and step 0-6" });
+    });
 }
+
+const isDay = (v: unknown): boolean => typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(v));
 
 function validateGoals(errors: ValidationError[], input: ProfileInput): void {
   const g = input.goals;
@@ -355,6 +374,8 @@ function validateAdvanced(errors: ValidationError[], input: ProfileInput): void 
   if (a.menstrualCycleTracking !== undefined && !isBool(a.menstrualCycleTracking)) {
     errors.push({ path: "advanced.menstrualCycleTracking", message: "must be a boolean" });
   }
+  rangeCheck(errors, "advanced.cycleLengthDays", a.cycleLengthDays, { min: 15, max: 60 }, false);
+  if (a.sweatTests !== undefined) arrayCheck(errors, "advanced.sweatTests", a.sweatTests, false);
 }
 
 function validateSchedule(errors: ValidationError[], input: ProfileInput): void {
@@ -374,6 +395,16 @@ function validateSchedule(errors: ValidationError[], input: ProfileInput): void 
       enumCheck(errors, `${base}.importance`, ev.importance, EVENT_IMPORTANCE, true);
     });
   }
+  if (s.preseasonStart !== undefined && !isDay(s.preseasonStart))
+    errors.push({ path: "schedule.preseasonStart", message: "must be a date in YYYY-MM-DD format" });
+  if (s.feeds !== undefined)
+    arrayCheck(errors, "schedule.feeds", s.feeds, false, (v, i) => {
+      const f = v as unknown as Record<string, unknown>;
+      if (!f || !isNonEmptyString(f.id) || !isFeedUrl(f.url))
+        errors.push({ path: `schedule.feeds[${i}].url`, message: "must be an https:// or webcal:// calendar link" });
+      if (f && f.defaultZip !== undefined && !isZip(f.defaultZip))
+        errors.push({ path: `schedule.feeds[${i}].defaultZip`, message: "must be a 5-digit ZIP code" });
+    });
   for (const field of ["travelDays", "tournamentWeekends"] as const) {
     if (s[field] !== undefined)
       arrayCheck(errors, `schedule.${field}`, s[field], false, (v, i) => {
@@ -398,7 +429,26 @@ function validateRoutine(errors: ValidationError[], input: ProfileInput): void {
     if (r[f] !== undefined && !isHHMM(r[f])) errors.push({ path: `routine.${f}`, message: "must be HH:MM" });
   }
   if (r.homeZip !== undefined && !isZip(r.homeZip)) errors.push({ path: "routine.homeZip", message: "must be a 5-digit ZIP code" });
+  if (r.school !== undefined) {
+    const sc = r.school as unknown as Record<string, unknown>;
+    if (!sc || typeof sc !== "object" || !isArray(sc.days) || !(sc.days as unknown[]).every((d) => Number.isInteger(d) && (d as number) >= 0 && (d as number) <= 6))
+      errors.push({ path: "routine.school.days", message: "must be weekday numbers 0-6" });
+    else {
+      for (const f of ["start", "end"]) if (!isHHMM(sc[f])) errors.push({ path: `routine.school.${f}`, message: "must be HH:MM" });
+      if (sc.lunch !== undefined && !isHHMM(sc.lunch)) errors.push({ path: "routine.school.lunch", message: "must be HH:MM" });
+      if (isHHMM(sc.start) && isHHMM(sc.end) && String(sc.end) <= String(sc.start))
+        errors.push({ path: "routine.school.end", message: "must be after the start time" });
+    }
+  }
 }
+
+export const isFeedUrl = (v: unknown): boolean => {
+  if (typeof v !== "string" || v.length > 1000) return false;
+  try {
+    const u = new URL(v.replace(/^webcal:/i, "https:"));
+    return u.protocol === "https:" && !!u.hostname && !/^(localhost|127\.|10\.|192\.168\.|169\.254\.|0\.)/.test(u.hostname) && !u.hostname.endsWith(".local");
+  } catch { return false; }
+};
 
 // --- top-level: profile ----------------------------------------------------
 
@@ -419,6 +469,11 @@ export function validateProfileInput(input: ProfileInput): ValidationResult {
   validateAdvanced(errors, input);
   validateSchedule(errors, input);
   validateRoutine(errors, input);
+  if (input.notifications !== undefined) {
+    const n = input.notifications as unknown as Record<string, unknown>;
+    if (!n || typeof n !== "object" || (n.weeklyReport !== undefined && !isBool(n.weeklyReport)))
+      errors.push({ path: "notifications.weeklyReport", message: "must be a boolean" });
+  }
 
   return { valid: errors.length === 0, errors };
 }
@@ -448,6 +503,25 @@ export function validateCheckInInput(input: CheckInInput): ValidationResult {
   rangeCheck(errors, "hrvMs", input.hrvMs, BOUNDS.hrvMs, false);
   rangeCheck(errors, "sessionMinutes", input.sessionMinutes, BOUNDS.sessionMinutes, false);
   scaleCheck(errors, "sessionRpe", input.sessionRpe);
+  rangeCheck(errors, "urineColor", input.urineColor, { min: 1, max: 8 }, false);
+  if (input.urineColor !== undefined && !Number.isInteger(input.urineColor)) errors.push({ path: "urineColor", message: "must be a whole number 1-8" });
+  scaleCheck(errors, "enjoyment", input.enjoyment);
+  rangeCheck(errors, "schoolLoad", input.schoolLoad, { min: 0, max: 16 }, false);
+  for (const f of ["sick", "fever", "headSymptoms", "inhalerUsed", "warmupDone", "breathingDone", "period"] as const) {
+    if (input[f] !== undefined && !isBool(input[f])) errors.push({ path: f, message: "must be a boolean" });
+  }
+  if (input.soreSpots !== undefined)
+    arrayCheck(errors, "soreSpots", input.soreSpots, false, (v, i) => {
+      const s = v as unknown as Record<string, unknown>;
+      if (!s) { errors.push({ path: `soreSpots[${i}]`, message: "is required" }); return; }
+      enumCheck(errors, `soreSpots[${i}].region`, s.region, BODY_REGIONS, true);
+      scaleCheck(errors, `soreSpots[${i}].level`, s.level);
+      if (s.level === undefined) errors.push({ path: `soreSpots[${i}].level`, message: "is required" });
+    });
+  if (input.soreSpots && input.soreSpots.length > BODY_REGIONS.length) errors.push({ path: "soreSpots", message: "too many" });
+  if (input.cycleSymptoms !== undefined)
+    arrayCheck(errors, "cycleSymptoms", input.cycleSymptoms, false, (v, i) => enumCheck(errors, `cycleSymptoms[${i}]`, v, CYCLE_SYMPTOMS, true));
+  if (input.source !== undefined && !(isString(input.source) && input.source.length <= 30)) errors.push({ path: "source", message: "must be short text" });
 
   return { valid: errors.length === 0, errors };
 }
@@ -468,6 +542,10 @@ export function validateEventInputs(events: unknown): ValidationResult {
       errors.push({ path: `${base}.startTime`, message: "must be an ISO-8601 datetime" });
     if (ev.importance !== undefined)
       enumCheck(errors, `${base}.importance`, ev.importance, EVENT_IMPORTANCE, false);
+    for (const f of ["title", "location"]) if (ev[f] !== undefined && !(isString(ev[f]) && (ev[f] as string).length <= 200))
+      errors.push({ path: `${base}.${f}`, message: "must be text under 200 characters" });
+    if (ev.durationMin !== undefined && !(isNumber(ev.durationMin) && ev.durationMin > 0 && ev.durationMin <= 720))
+      errors.push({ path: `${base}.durationMin`, message: "must be 1-720 minutes" });
     if (ev.zip !== undefined && !(typeof ev.zip === "string" && /^\d{5}$/.test(ev.zip)))
       errors.push({ path: `${base}.zip`, message: "must be a 5-digit ZIP code" });
   });

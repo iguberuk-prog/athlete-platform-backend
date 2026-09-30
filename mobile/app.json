@@ -15,6 +15,8 @@
       "config": { "usesNonExemptEncryption": false },
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
+        "NSCameraUsageDescription": "Scan food barcodes and take photos of meals to check them against your food rules.",
+        "NSPhotoLibraryUsageDescription": "Choose a photo of a meal to check it against your food rules.",
         "UIBackgroundModes": []
       }
     },

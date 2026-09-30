@@ -16,6 +16,12 @@ import * as grocery from "./views/grocery.js";
 import * as team from "./views/team.js";
 import * as settings from "./views/settings.js";
 import * as program from "./views/program.js";
+import * as health from "./views/health.js";
+import * as meals from "./views/meals.js";
+import * as scan from "./views/scan.js";
+import * as devices from "./views/devices.js";
+import * as family from "./views/family.js";
+import * as report from "./views/report.js";
 
 export const state = {
   user: null,          // { email, role }
@@ -27,11 +33,12 @@ export const state = {
 const VIEWS = {
   today, gameday, recovery, checkin, more, schedule, trends, grocery, team,
   profile, program, reminders: settings, account: settings,
+  health, meals, scan, devices, family, report,
 };
 
 // Views register click handlers by name; buttons carry data-act="name".
 const actions = {};
-for (const v of [auth, profile, today, gameday, recovery, checkin, more, schedule, trends, grocery, team, settings, program]) {
+for (const v of [auth, profile, today, gameday, recovery, checkin, more, schedule, trends, grocery, team, settings, program, health, meals, scan, devices, family, report]) {
   Object.assign(actions, v.actions || {});
 }
 
@@ -79,6 +86,7 @@ const TITLES = {
   today: "Today", gameday: "Game Day", recovery: "Recovery", checkin: "Check-in", more: "More",
   schedule: "Schedule", trends: "Trends", grocery: "Grocery list", team: "Team", profile: "Profile",
   reminders: "Reminders", account: "Account", program: "My program",
+  health: "Health", meals: "Meals", scan: "Scan food", devices: "Devices", family: "Family", report: "Weekly report",
 };
 
 function switcher() {
@@ -108,10 +116,12 @@ export async function render() {
     name = "profile"; state.route = { name, sub: "new", query: { first: "1" } };
   }
   if (!VIEWS[name]) { name = isCoach() && !state.profiles.length ? "team" : "today"; state.route.name = name; }
+  // Screens that need a player profile.
+  if (!active() && ["health", "meals", "scan", "devices", "report"].includes(name)) { name = isCoach() ? "team" : "today"; state.route.name = name; }
 
   const tabs = needsProfile ? [] : tabsFor();
   const tabNames = tabs.map((t) => t[0]);
-  const showSwitch = ["today", "gameday", "recovery", "checkin", "schedule", "trends", "grocery", "program"].includes(name) ||
+  const showSwitch = ["today", "gameday", "recovery", "checkin", "schedule", "trends", "grocery", "program", "health", "meals", "scan", "devices", "report"].includes(name) ||
     (name === "team" && !isCoach());
   const titleText = name === "profile" && state.route.sub === "new"
     ? (isParent() ? "Add an athlete" : "Set up your profile")
@@ -167,6 +177,12 @@ document.addEventListener("click", (ev) => {
   if (!fn) return;
   if (el.tagName === "A" || el.tagName === "BUTTON") ev.preventDefault();
   Promise.resolve(fn(el, ev)).catch((e) => { console.error(e); toast(e.message || "Something went wrong"); });
+});
+document.addEventListener("change", (ev) => {
+  const el = ev.target.closest("[data-change]");
+  if (!el) return;
+  const fn = actions[el.dataset.change];
+  if (fn) Promise.resolve(fn(el, ev)).catch((e) => { console.error(e); toast(e.message || "Something went wrong"); });
 });
 document.addEventListener("submit", (ev) => {
   const f = ev.target.closest("form[data-submit]");

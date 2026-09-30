@@ -60,7 +60,9 @@ export class ProfileService {
     if (!result.valid) {
       return { ok: false, code: "validation", errors: result.errors };
     }
-    const value = await this.repo.update(ownerId, id, input);
+    const prev = await this.repo.getById(ownerId, id);
+    if (!prev) return { ok: false, code: "not_found" };
+    const value = await this.repo.update(ownerId, id, keepManaged(prev, input));
     return value ? { ok: true, value } : { ok: false, code: "not_found" };
   }
 
@@ -133,4 +135,22 @@ export class ProfileService {
     });
     return updated ? { ok: true, value: updated } : { ok: false, code: "not_found" };
   }
+}
+
+/**
+ * Fields the server manages through their own endpoints (concussion steps,
+ * sweat tests, height log, calendar feeds). A full-profile save from the app
+ * can't overwrite them, so a return-to-play step can't be skipped by editing.
+ */
+export function keepManaged(prev: AthleteProfile, input: ProfileInput): ProfileInput {
+  const out: ProfileInput = { ...input };
+  if (prev.health?.concussions) out.health = { injuryHistory: [], currentInjuries: [], medicalConditions: [], medications: [], ...(input.health || {}), concussions: prev.health.concussions };
+  if (prev.advanced?.sweatTests) out.advanced = { ...(input.advanced || {}), sweatTests: prev.advanced.sweatTests, sweatRateLitresPerHour: prev.advanced.sweatRateLitresPerHour };
+  if (prev.anthropometrics.heightHistory) out.anthropometrics = { ...input.anthropometrics, heightHistory: prev.anthropometrics.heightHistory };
+  if (prev.schedule?.feeds) {
+    const imported = (prev.schedule.events || []).filter((e) => e.source && e.source !== "manual");
+    const manual = (input.schedule?.events || []).filter((e) => !e.source || e.source === "manual");
+    out.schedule = { ...(input.schedule || { events: [] }), events: [...manual, ...imported], feeds: prev.schedule.feeds };
+  }
+  return out;
 }

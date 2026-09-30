@@ -16,13 +16,23 @@ import {
   SqliteAthleteProfileRepository,
   SqliteCheckInRepository,
   SqliteTeamRepository,
+  SqliteRecordRepository,
 } from "./data/sqliteRepository.js";
 import {
   SupabaseAthleteProfileRepository,
   SupabaseCheckInRepository,
   SupabaseTeamRepository,
+  SupabaseRecordRepository,
 } from "./data/supabaseRepository.js";
-import type { AthleteProfileRepository, CheckInRepository, TeamRepository } from "./data/repository.js";
+import type { AthleteProfileRepository, CheckInRepository, RecordRepository, TeamRepository } from "./data/repository.js";
+import { FamilyService } from "./services/familyService.js";
+import { HealthService } from "./services/healthService.js";
+import { CalendarService } from "./services/calendarService.js";
+import { ProductService } from "./services/productService.js";
+import { ReportService } from "./services/reportService.js";
+import { IntegrationService } from "./services/integrationService.js";
+import { PlateService } from "./services/plateService.js";
+import { ResendMailer } from "./services/notifier.js";
 import { ProfileService } from "./services/profileService.js";
 import { CheckInService } from "./services/checkinService.js";
 import { PlanService } from "./services/planService.js";
@@ -38,21 +48,37 @@ interface Services {
   insights: InsightService;
   teams: TeamService;
   account: AccountService;
+  family: FamilyService;
+  health: HealthService;
+  calendar: CalendarService;
+  products: ProductService;
+  reports: ReportService;
+  integrations: IntegrationService;
+  plates: PlateService;
 }
 
-function wire(p: AthleteProfileRepository, c: CheckInRepository, t: TeamRepository): Services {
+function wire(p: AthleteProfileRepository, c: CheckInRepository, t: TeamRepository, r: RecordRepository): Services {
   // Live forecasts unless switched off (WEATHER=off), e.g. for offline development.
   const weather: WeatherProvider | null =
     process.env.WEATHER === "off" ? null
       : process.env.WEATHER === "demo" && process.env.DB_BACKEND !== "supabase" ? new DemoProvider()
         : new NwsProvider();
+  const family = new FamilyService(p, r);
+  const mailer = new ResendMailer();
   return {
     profiles: new ProfileService(p),
     checkins: new CheckInService(c, p),
     plans: new PlanService(p, c, weather),
     insights: new InsightService(p, c, weather),
-    teams: new TeamService(t, p, c),
-    account: new AccountService(p, c, t),
+    teams: new TeamService(t, p, c, family, mailer),
+    account: new AccountService(p, c, t, r),
+    family,
+    health: new HealthService(p, c, family, weather),
+    calendar: new CalendarService(p, family),
+    products: new ProductService(p, family, r),
+    reports: new ReportService(p, c, family, r, mailer),
+    integrations: new IntegrationService(p, c, family, r),
+    plates: new PlateService(p, family, r),
   };
 }
 
@@ -68,6 +94,7 @@ function build(): Services {
       new SupabaseAthleteProfileRepository(url, key),
       new SupabaseCheckInRepository(url, key),
       new SupabaseTeamRepository(url, key),
+      new SupabaseRecordRepository(url, key),
     );
   }
 
@@ -77,6 +104,7 @@ function build(): Services {
     new SqliteAthleteProfileRepository(db),
     new SqliteCheckInRepository(db),
     new SqliteTeamRepository(db),
+    new SqliteRecordRepository(db),
   );
 }
 
@@ -108,3 +136,11 @@ export function getTeamService(): TeamService {
 export function getAccountService(): AccountService {
   return getServices().account;
 }
+
+export const getFamilyService = () => getServices().family;
+export const getHealthService = () => getServices().health;
+export const getCalendarService = () => getServices().calendar;
+export const getProductService = () => getServices().products;
+export const getReportService = () => getServices().reports;
+export const getIntegrationService = () => getServices().integrations;
+export const getPlateService = () => getServices().plates;

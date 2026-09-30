@@ -125,6 +125,7 @@ export default function App() {
             domStorageEnabled
             javaScriptEnabled
             allowsInlineMediaPlayback
+            mediaCapturePermissionGrantType="grantIfSameHostElsePrompt"
             contentInsetAdjustmentBehavior="never"
             decelerationRate="normal"
             startInLoadingState

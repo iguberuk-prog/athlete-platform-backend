@@ -11,6 +11,18 @@ What is built, and the steps only you can do (they need your accounts). In order
 
 Netlify env vars: `DB_BACKEND`, `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `SUPABASE_ANON_KEY`, `ADMIN_KEY`. Recommended: `NWS_USER_AGENT` = `AthletePerformanceApp (your-support-email)`. The National Weather Service asks apps to identify themselves with a contact email. Do NOT set `ALLOW_DEV_AUTH` or `WEATHER=demo` on Netlify.
 
+New in this release:
+- Run `supabase/003_records.sql` in the Supabase SQL editor (family links, device connections, usage limits).
+- `APP_URL` = your site address, e.g. `https://your-site.netlify.app` (used for sign-in redirects and email links).
+- `TOKEN_KEY` = a long random string (40+ characters). Encrypts wearable keys. Never change it after people connect devices.
+- Weekly parent emails and team-join notices: `RESEND_API_KEY` and `EMAIL_FROM` (a sender on a domain you verify in Resend). Without them, emails are skipped.
+- Meal photos: `ANTHROPIC_API_KEY` (optional `ANTHROPIC_MODEL`). Without it, the photo tab says it isn't set up.
+- Barcode scanner: works with no key. Optional `OFF_USER_AGENT` = `AthletePerformance/1.0 (your-support-email)`.
+- Whoop: create an app at developer.whoop.com, redirect URI `{APP_URL}/api/integrations/whoop/callback`, then set `WHOOP_CLIENT_ID` and `WHOOP_CLIENT_SECRET`.
+- Oura: create an app at cloud.ouraring.com/oauth/applications, redirect URI `{APP_URL}/api/integrations/oura/callback`, then set `OURA_CLIENT_ID` and `OURA_CLIENT_SECRET`. Oura allows 10 users until they approve the app.
+- Garmin: apply at developer.garmin.com (Health API). Leave `GARMIN_APPROVED` unset until approved.
+- Scheduled functions run on their own: `daily-sync` (calendars and devices, daily) and `weekly-report` (Sunday evening).
+
 ## 2. Use it with the team this week
 
 On iPhone: open the site in Safari > Share > **Add to Home Screen**. It runs full-screen and opens offline at the field. Create a coach account, make a team, share the code.

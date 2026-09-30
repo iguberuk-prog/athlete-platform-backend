@@ -12,7 +12,7 @@
  */
 
 import type { Config, Context } from "@netlify/functions";
-import { getInsightService } from "../../src/container.js";
+import { getInsightService, getFamilyService } from "../../src/container.js";
 import { currentUser, dateParam, errorResponse, intParam, json, notFound, unauthorized, utcToday } from "../../src/http.js";
 import type { ReminderPrefs } from "../../src/domain/reminders.js";
 
@@ -22,6 +22,7 @@ export default async (req: Request, context: Context): Promise<Response> => {
   if (req.method !== "GET") return json({ error: "method_not_allowed" }, 405);
   const id = context.params?.id;
   if (!id) return json({ error: "profile id required in path" }, 400);
+  const owner: string = (await getFamilyService().ownerFor(user.id, id)) ?? "__none__";
 
   const url = new URL(req.url);
   const kind = url.pathname.split("/").filter(Boolean).pop();
@@ -33,21 +34,21 @@ export default async (req: Request, context: Context): Promise<Response> => {
     let result;
     switch (kind) {
       case "today":
-        result = await svc.today(user.id, id, date, now);
+        result = await svc.today(owner, id, date, now);
         break;
       case "recovery":
-        result = await svc.recovery(user.id, id, date, url.searchParams.get("match") || undefined);
+        result = await svc.recovery(owner, id, date, url.searchParams.get("match") || undefined);
         break;
       case "trends":
-        result = await svc.trends(user.id, id, date, intParam(url, "days", 28, 7, 60));
+        result = await svc.trends(owner, id, date, intParam(url, "days", 28, 7, 60));
         break;
       case "grocery":
-        result = await svc.grocery(user.id, id, dateParam(url, "from", date), intParam(url, "days", 7, 1, 14));
+        result = await svc.grocery(owner, id, dateParam(url, "from", date), intParam(url, "days", 7, 1, 14));
         break;
       case "reminders": {
         const off = (url.searchParams.get("off") || "").split(",").filter(Boolean);
         const prefs: ReminderPrefs = Object.fromEntries(off.map((k) => [k, false]));
-        result = await svc.reminders(user.id, id, {
+        result = await svc.reminders(owner, id, {
           from: dateParam(url, "from", date),
           days: intParam(url, "days", 7, 1, 14),
           now,
@@ -57,7 +58,7 @@ export default async (req: Request, context: Context): Promise<Response> => {
         break;
       }
       case "program":
-        result = await svc.program(user.id, id);
+        result = await svc.program(owner, id);
         break;
       default:
         return notFound();

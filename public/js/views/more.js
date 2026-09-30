@@ -16,12 +16,13 @@ const tile = (to, ic, a, b) =>
 export async function render(el, ctx) {
   const p = ctx.profile;
   const head = p ? `
+    ${p.shared ? `<div class="msg info" style="margin:0 0 10px">Shared with you by family link. Only the owner can edit this profile.</div>` : ""}
     <div class="card" style="display:flex;gap:14px;align-items:center">
       ${avatar(p, "lg")}
       <div style="flex:1;min-width:0"><div class="rowtitle" style="font-size:17px">${esc(p.identity.fullName)}</div>
         <div class="rowsub">${esc(SPORTS[p.sport.primarySport]?.label || p.sport.primarySport)} · ${esc((p.sport.positions || []).join(", ").replace(/_/g, " "))}</div>
         <div class="rowsub">${esc(p.identity.playerCode || "")}</div></div>
-      <button class="btn ghost sm" data-act="nav" data-to="#/profile/edit">Edit</button>
+      ${p.shared ? "" : `<button class="btn ghost sm" data-act="nav" data-to="#/profile/edit">Edit</button>`}
     </div>` : "";
 
   const install = !isNative() && !standalone() ? `
@@ -36,11 +37,17 @@ export async function render(el, ctx) {
     ${head}
     ${install}
     <div class="sectionTitle">Plan</div>
+    ${p ? tile("#/scan", "scan", "Scan food", "Is it safe, and is now a good time?") : ""}
+    ${p ? tile("#/health", "pulse", "Health", "Injuries, concussion steps, warm-ups, school and travel") : ""}
+    ${p ? tile("#/meals", "fork", "Meals", "Week plan, recipes and eating out") : ""}
     ${p ? tile("#/program", "user", "My program", "Age-based fuel, sleep and recovery") : ""}
     ${p ? tile("#/profile/edit?food=1", "heart", "Food safety", "Allergies, diets and foods to avoid") : ""}
     ${p ? tile("#/schedule", "calendar", "Schedule", "Games, practices and repeats") : ""}
     ${p ? tile("#/trends", "chart", "Trends", "Sleep, readiness and training load") : ""}
     ${p ? tile("#/grocery", "cart", "Grocery list", "This week's shopping, allergy-safe") : ""}
+    ${p ? tile("#/report", "doc", "Weekly report", "The week in one page") : ""}
+    ${p && (p.features?.appleHealth || p.features?.whoop || p.features?.garmin) ? tile("#/devices", "watch", "Devices", "Whoop, Oura, Garmin, Apple Health") : ""}
+    ${tile("#/family", "family", "Family", "Link parent and player accounts")}
     ${tile("#/team", "team", isCoach() ? "My teams" : "Team", isCoach() ? "Rosters, readiness and join codes" : "Join your coach's team")}
     ${isParent() ? tile("#/profile/new", "user", "Add an athlete", "Manage another child's plan") : ""}
     <div class="sectionTitle">Settings</div>

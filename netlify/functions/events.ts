@@ -14,7 +14,7 @@
 import type { Config, Context } from "@netlify/functions";
 import { verifyUser } from "../../src/auth.js";
 import { errorResponse } from "../../src/http.js";
-import { getProfileService } from "../../src/container.js";
+import { getProfileService, getFamilyService } from "../../src/container.js";
 import type { ScheduledEvent } from "../../src/domain/profile.js";
 
 function json(body: unknown, status = 200): Response {
@@ -26,12 +26,14 @@ function json(body: unknown, status = 200): Response {
 
 
 export default async (req: Request, context: Context): Promise<Response> => {
-  const ownerId = (await verifyUser(req))?.id ?? null;
-  if (!ownerId) {
+  const userId = (await verifyUser(req))?.id ?? null;
+  if (!userId) {
     return json({ error: "unauthorized", message: "Please sign in." }, 401);
   }
   const id = context.params?.id;
   if (!id) return json({ error: "profile id required in path" }, 400);
+  // The owner, or a linked parent/player (family link). Unknown -> not found.
+  const ownerId = (await getFamilyService().ownerFor(userId, id)) ?? "__none__";
 
   const service = getProfileService();
 

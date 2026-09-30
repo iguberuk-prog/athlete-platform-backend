@@ -169,6 +169,20 @@ function bodySection(p) {
         <div><label class="f" for="days">Practices per week</label><input class="input" id="days" inputmode="numeric" value="${tr.trainingDaysPerWeek ?? 3}"></div>
         <div><label class="f" for="mins">Practice length (min)</label><input class="input" id="mins" inputmode="numeric" value="${tr.avgSessionMinutes ?? 75}"></div>
       </div>
+      <div id="schoolBox">
+      <label class="f">School hours <span class="dim">(optional, so snacks fit around class)</span></label>
+      <div class="row3">
+        <div><input class="input" id="schStart" type="time" aria-label="School starts" value="${esc(rt.school?.start || "")}"><div class="hint">Starts</div></div>
+        <div><input class="input" id="schLunch" type="time" aria-label="Lunch" value="${esc(rt.school?.lunch || "")}"><div class="hint">Lunch</div></div>
+        <div><input class="input" id="schEnd" type="time" aria-label="School ends" value="${esc(rt.school?.end || "")}"><div class="hint">Ends</div></div>
+      </div></div>
+      <label class="f" for="preseason">First day of preseason <span class="dim">(optional, for the 14-day heat plan)</span></label>
+      <input class="input" id="preseason" type="date" value="${esc(p?.schedule?.preseasonStart || "")}">
+      <label class="f">Health</label>
+      <label class="check"><input type="checkbox" id="asthma" ${p?.health?.asthma?.has ? "checked" : ""}><span>Has asthma or exercise-induced asthma</span></label>
+      <label class="check"><input type="checkbox" id="asthmaPre" ${p?.health?.asthma?.preExerciseInhaler ? "checked" : ""}><span>Doctor says to use the inhaler before exercise</span></label>
+      <label class="check"><input type="checkbox" id="asthmaCold" ${(p?.health?.asthma?.triggers || []).includes("cold air") ? "checked" : ""}><span>Cold air sets it off</span></label>
+      <label class="check" id="cycleRow"><input type="checkbox" id="cycle" ${p?.advanced?.menstrualCycleTracking ? "checked" : ""}><span>Track periods in check-ins <span class="dim">(optional, private, never shown to coaches)</span></span></label>
     </section>`;
 }
 
@@ -186,6 +200,7 @@ function reviewSection(p) {
         <div><label class="f" for="emName">Emergency contact</label><input class="input" id="emName" value="${esc(ct.emergencyContact?.name || "")}"></div>
         <div><label class="f" for="emPhone">Their phone</label><input class="input" id="emPhone" type="tel" value="${esc(ct.emergencyContact?.phone || "")}"></div>
       </div>
+      <label class="check"><input type="checkbox" id="weeklyReport" ${p?.notifications?.weeklyReport === false ? "" : "checked"}><span>Email parents a weekly report <span class="dim">(players under 18)</span></span></label>
       <label class="check confirm"><input type="checkbox" id="confirmSafety"><span><b>This food-safety information is complete and correct.</b> ${whoCap()} will only see foods that fit it. I'll update it if anything changes.</span></label>
     </section>`;
 }
@@ -449,7 +464,18 @@ function payload(existing) {
       bodyMassKg: lbToKg(Number(val("weight"))),
     },
     training: { ...(base.training || {}), trainingDaysPerWeek: Number(val("days")) || undefined, avgSessionMinutes: Number(val("mins")) || undefined },
-    routine: { wakeTime: val("wake") || "07:00", bedTime: val("bed") || "22:00", usualPracticeTime: val("practice") || "17:00", homeZip: val("homeZip") || undefined },
+    routine: {
+      ...(base.routine || {}),
+      wakeTime: val("wake") || "07:00", bedTime: val("bed") || "22:00", usualPracticeTime: val("practice") || "17:00", homeZip: val("homeZip") || undefined,
+      school: val("schStart") && val("schEnd") ? { days: [1, 2, 3, 4, 5], start: val("schStart"), end: val("schEnd"), lunch: val("schLunch") || undefined } : undefined,
+    },
+    health: {
+      injuryHistory: [], currentInjuries: [], medicalConditions: [], medications: [],
+      ...(base.health || {}),
+      asthma: $("#asthma")?.checked ? { has: true, preExerciseInhaler: $("#asthmaPre").checked || undefined, triggers: $("#asthmaCold").checked ? ["cold air"] : undefined } : undefined,
+    },
+    advanced: { ...(base.advanced || {}), menstrualCycleTracking: val("sex") === "female" && $("#cycle")?.checked ? true : undefined },
+    notifications: { ...(base.notifications || {}), weeklyReport: $("#weeklyReport") ? $("#weeklyReport").checked : undefined },
     contact,
     nutrition: {
       ...(base.nutrition || {}),
@@ -460,7 +486,7 @@ function payload(existing) {
       dislikes: val("dislikes").split(",").map((s) => s.trim()).filter(Boolean),
       safetyConfirmedAt: new Date().toISOString(),
     },
-    schedule: base.schedule || { events: [] },
+    schedule: { ...(base.schedule || { events: [] }), preseasonStart: val("preseason") || undefined },
   };
 }
 

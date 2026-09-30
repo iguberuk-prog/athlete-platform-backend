@@ -6,6 +6,8 @@ const FLAG_LABEL = { green: "Green flag", yellow: "Yellow flag", orange: "Orange
 const COLD_LABEL = { cool: "Cool", cold: "Cold", very_cold: "Very cold", extreme: "Extreme cold" };
 
 export function flagPill(c) {
+  if (c.alerts?.some((a) => /thunder|tornado|lightning/i.test(a.event)) || (c.thunderPct ?? 0) >= 40) return `<span class="flag red">Storms</span>`;
+  if (c.air && !["good", "moderate"].includes(c.air)) return `<span class="flag orange">Air quality</span>`;
   if (c.heat && c.heat !== "green") return `<span class="flag ${c.heat}">${FLAG_LABEL[c.heat]}</span>`;
   if (c.cold && c.cold !== "none") return `<span class="flag coldf">${COLD_LABEL[c.cold]}</span>`;
   return `<span class="flag green">Comfortable</span>`;

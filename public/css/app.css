@@ -520,3 +520,4 @@ details.rcard[open] > summary { margin-bottom: 6px; }
 .qrbox svg { width: 100%; height: 100%; display: block; }
 .auth .brand { display: flex; gap: 12px; align-items: center; margin-bottom: 18px; }
 .auth h1.big { font-size: 30px; line-height: 1.1; margin: 0 0 8px; }
+.input.search { margin: 0 0 12px; padding-left: 40px; background: var(--panel) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2398a6b6' stroke-width='2'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='M20 20l-4-4'/%3E%3C/svg%3E") no-repeat 12px center / 18px; }

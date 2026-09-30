@@ -10,8 +10,42 @@ window.addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); inst
 const standalone = () => window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
 const isIOS = () => /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 
-const tile = (to, ic, a, b) =>
-  `<button class="tile" data-act="nav" data-to="${to}"><span class="ic">${icon(ic)}</span><span><div class="tt">${a}</div><div class="ts">${b}</div></span><span class="chev">›</span></button>`;
+// Extra words people might type, so search finds the right screen.
+const KW = {
+  "#/connect": "teamsnap sportsengine playmetrics gamechanger leagueapps gotsport calendar sync import schedule link google spond band",
+  "#/schedule": "games practice calendar add event match training",
+  "#/meals": "recipes cook cooking food dinner lunch breakfast snack eat meal plan restaurant eating out",
+  "#/scan": "barcode product label qr camera",
+  "#/fun": "quiz sticker buddy playlist spotify music story wrapped cook night grocery hunt game kids",
+  "#/invite": "share friend refer referral text sms email qr download app teammate",
+  "#/health": "injury concussion asthma warmup warm-up period cycle sick soreness growth heat",
+  "#/emergency": "epipen allergy contact 911 medical card",
+  "#/profile/edit?food=1": "allergy allergies diet vegetarian vegan gluten dairy nuts kosher halal",
+  "#/profile/edit": "edit profile name birthday weight height position level delete player",
+  "#/grocery": "shopping list store",
+  "#/progress": "streak badge points risk injury freeze",
+  "#/journal": "stats goals game log reflection",
+  "#/program": "age sleep protein hydration water",
+  "#/tournament": "cooler hotel between games",
+  "#/budget": "money cost fees expense",
+  "#/family": "parent link share account kid",
+  "#/club": "director coach trainer club",
+  "#/team": "join code coach roster team",
+  "#/reminders": "notifications alerts nudges",
+  "#/account": "password delete email logout sign out",
+  "#/season": "pdf review print",
+  "#/mind": "nerves confidence mental breathing",
+  "#/ask": "question chat help",
+  "#/devices": "whoop oura garmin apple health watch wearable",
+  "#/experts": "dietitian nutritionist camp",
+  "#/trends": "chart graph sleep readiness load",
+  "#/today": "home plan today morning",
+  "#/gameday": "game day kickoff timeline match",
+  "#/recovery": "recovery after game rest",
+  "#/checkin": "check in how i feel sleep soreness mood",
+};
+const tile = (to, ic, a, b, extra = "") =>
+  `<button class="tile ${extra}" data-act="nav" data-to="${to}" data-k="${esc(KW[to] || "")}"><span class="ic">${icon(ic)}</span><span><div class="tt">${a}</div><div class="ts">${b}</div></span><span class="chev">›</span></button>`;
 
 export async function render(el, ctx) {
   const p = ctx.profile;
@@ -35,6 +69,13 @@ export async function render(el, ctx) {
 
   el.innerHTML = `
     ${head}
+    <input class="input search" id="moreSearch" type="search" placeholder="Search: recipes, TeamSnap, allergies, invite…" autocomplete="off" aria-label="Search the app">
+    <div id="moreNone" class="empty" hidden><div class="muted">Nothing matches. Try another word.</div></div>
+    ${p ? tile("#/today", "today", "Today", "Your plan for today", "onlySearch") : ""}
+    ${p ? tile("#/gameday", "ball", "Game Day", "Timeline and fuel for the next game", "onlySearch") : ""}
+    ${p ? tile("#/recovery", "recover", "Recovery", "After the game", "onlySearch") : ""}
+    ${p ? tile("#/checkin", "check", "Check-in", "How you feel today", "onlySearch") : ""}
+    ${p && !p.shared ? tile("#/profile/edit", "user", "Edit profile", "Name, birthday, body, position, delete player", "onlySearch") : ""}
     ${install}
     <div class="sectionTitle">Plan</div>
     ${p ? tile("#/fun", "star", "Fun", p.features?.fuelBuddy ? "Your fuel buddy, stickers, stories and games" : p.features?.playlist ? "Playlist, season wrapped, quiz and cook night" : "Car quiz, cook night and grocery hunt") : ""}
@@ -71,6 +112,25 @@ export async function render(el, ctx) {
     <a class="tile" href="/terms.html" style="text-decoration:none"><span class="ic">${icon("doc")}</span><span><div class="tt">Terms of Use</div></span><span class="chev">›</span></a>
     <button class="btn ghost block" style="margin-top:8px" data-act="logout">Log out</button>
     <p class="disc">Nutrition guidance in this app is general education based on published sports-nutrition research. It is not medical advice. Athletes with medical conditions, eating concerns, or injuries should work with a doctor or registered dietitian.</p>`;
+  wireSearch(el);
+}
+
+function wireSearch(el) {
+  const input = el.querySelector("#moreSearch");
+  if (!input) return;
+  const run = () => {
+    const words = input.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    let shown = 0;
+    el.querySelectorAll(".tile").forEach((t) => {
+      const hay = `${t.textContent} ${t.dataset.k || ""}`.toLowerCase();
+      const hit = words.length ? words.every((w) => hay.includes(w)) : !t.classList.contains("onlySearch");
+      t.hidden = !hit; if (hit) shown++;
+    });
+    el.querySelectorAll(".sectionTitle, .disc, [data-act=logout], .card:not(.tile)").forEach((x) => { x.hidden = words.length > 0; });
+    el.querySelector("#moreNone").hidden = !words.length || shown > 0;
+  };
+  input.addEventListener("input", run);
+  run();
 }
 
 export const actions = {

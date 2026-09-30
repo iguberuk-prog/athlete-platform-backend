@@ -13,160 +13,14 @@ import { effectiveAge } from "./profile.js";
 import { bandForAge } from "./ageBands.js";
 import { addDays, shortDate } from "./dates.js";
 import { classifyDay, type DayType } from "./daily.js";
-import { food, isSafe, safetyContext, unsafeReason, type Food, type FoodTags, type SafetyContext } from "./foods.js";
+import { safetyContext, unsafeReason, type FoodTags } from "./foods.js";
 
-type Meal = "breakfast" | "lunch" | "dinner" | "snack" | "recovery";
+export type { Recipe } from "./recipes.js";
+import { planCandidates, recipeBook, type Meal, type Recipe, type RecipeFilter } from "./recipes.js";
 
-interface Slot { ids: string[]; qty: string; optional?: boolean }
-
-interface RecipeDef {
-  id: string;
-  title: (p: Record<string, string>) => string;
-  meals: Meal[];
-  /** Best on these day types. */
-  days: DayType[];
-  minutes: number;
-  slots: Record<string, Slot>;
-  steps: (p: Record<string, string>) => string[];
-  /** Too heavy for the night before or morning of a game. */
-  heavy?: boolean;
-  minAge?: number;
-}
-
-const ALL: DayType[] = ["match", "match_eve", "recovery", "training", "rest"];
-const PROTEIN = ["chicken", "turkey", "tofu", "eggs", "salmon"];
-const MILKS = ["milk", "lf_milk", "soy_milk"];
-const YOGURT = ["greek_yogurt", "lf_yogurt"];
-const PASTA = ["pasta", "gf_pasta"];
-const SOY = ["soy_sauce", "tamari", "coconut_aminos"];
-const FAT = ["olive_oil"];
-
-const RECIPES: RecipeDef[] = [
-  {
-    id: "overnight_oats", meals: ["breakfast"], days: ALL, minutes: 5,
-    title: () => "Overnight oats",
-    slots: { oats: { ids: ["oats"], qty: "1/2 cup" }, milk: { ids: MILKS, qty: "1/2 cup" }, yog: { ids: YOGURT, qty: "1/4 cup", optional: true }, fruit: { ids: ["berries", "banana"], qty: "1/2 cup" }, top: { ids: ["chia", "maple"], qty: "1 tsp", optional: true } },
-    steps: (p) => [`Stir ${p.oats} with ${p.milk}${p.yog ? ` and ${p.yog}` : ""} in a jar.`, "Refrigerate overnight.", `Top with ${p.fruit}${p.top ? ` and ${p.top}` : ""} in the morning.`],
-  },
-  {
-    id: "breakfast_toast", meals: ["breakfast"], days: ALL, minutes: 10,
-    title: (p) => `Scrambled eggs on ${p.toast}`,
-    slots: { eggs: { ids: ["eggs"], qty: "2 to 3" }, toast: { ids: ["toast", "gf_toast"], qty: "2 slices" }, fat: { ids: ["butter", ...FAT], qty: "1 tsp" }, fruit: { ids: ["orange", "berries", "banana"], qty: "1 serving" } },
-    steps: (p) => [`Whisk the eggs and cook gently in ${p.fat}.`, `Serve on ${p.toast} with ${p.fruit} on the side.`],
-  },
-  {
-    id: "yogurt_parfait", meals: ["breakfast", "snack", "recovery"], days: ALL, minutes: 3,
-    title: () => "Yogurt parfait",
-    slots: { yog: { ids: YOGURT, qty: "1 cup" }, fruit: { ids: ["berries", "banana"], qty: "1/2 cup" }, crunch: { ids: ["oats"], qty: "1/4 cup", optional: true }, sweet: { ids: ["honey", "maple"], qty: "1 tsp", optional: true } },
-    steps: (p) => [`Layer ${p.yog} with ${p.fruit}${p.crunch ? ` and ${p.crunch}` : ""}.`, p.sweet ? `Drizzle with ${p.sweet}.` : "Serve cold."],
-  },
-  {
-    id: "pancakes", meals: ["breakfast"], days: ["match_eve", "rest", "recovery", "match"], minutes: 20,
-    title: () => "Banana pancakes",
-    slots: { flour: { ids: ["flour", "gf_flour"], qty: "1 cup" }, milk: { ids: MILKS, qty: "3/4 cup" }, banana: { ids: ["banana"], qty: "1 mashed" }, eggs: { ids: ["eggs"], qty: "1", optional: true }, top: { ids: ["maple", "honey", "berries"], qty: "to taste" } },
-    steps: (p) => [`Mix ${p.flour}, ${p.milk}, the banana${p.eggs ? " and an egg" : ""} and a pinch of baking powder.`, "Cook small pancakes on a lightly oiled pan.", `Top with ${p.top}. Great for game morning 3+ hours before kickoff.`],
-  },
-  {
-    id: "rice_bowl", meals: ["lunch", "dinner", "recovery"], days: ALL, minutes: 25,
-    title: (p) => `${cap(p.protein)} rice bowl`,
-    slots: { rice: { ids: ["rice", "quinoa"], qty: "1 to 2 cups cooked" }, protein: { ids: PROTEIN, qty: "a palm-size portion" }, veg: { ids: ["carrots", "cucumber", "peppers", "greens"], qty: "1 cup" }, sauce: { ids: SOY, qty: "1 tbsp", optional: true }, fat: { ids: FAT, qty: "1 tsp" } },
-    steps: (p) => [`Cook the ${p.rice}.`, `Cook ${p.protein} in ${p.fat} and slice it.`, `Pile it all in a bowl with ${p.veg}${p.sauce ? ` and a splash of ${p.sauce}` : ""}.`],
-  },
-  {
-    id: "pasta_night", meals: ["dinner"], days: ["match_eve", "training", "rest", "recovery"], minutes: 25,
-    title: (p) => `${cap(p.pasta)} with ${p.protein} and tomato sauce`,
-    slots: { pasta: { ids: PASTA, qty: "2 cups cooked" }, sauce: { ids: ["tomato_sauce"], qty: "3/4 cup" }, protein: { ids: ["turkey", "chicken", "beef", "tofu", "lentils"], qty: "a palm-size portion" }, cheese: { ids: ["parmesan"], qty: "a sprinkle", optional: true }, veg: { ids: ["greens", "peppers", "carrots"], qty: "1 cup" } },
-    steps: (p) => [`Boil the ${p.pasta}.`, `Brown ${p.protein} and simmer it in ${p.sauce} for 10 minutes.`, `Serve with ${p.veg} on the side${p.cheese ? ` and ${p.cheese} on top` : ""}. The classic night-before-game meal.`],
-  },
-  {
-    id: "tacos", meals: ["lunch", "dinner"], days: ["training", "rest", "recovery"], minutes: 20,
-    title: (p) => `${cap(p.protein).replace(/s$/, "")} tacos`,
-    slots: { shell: { ids: ["corn_tortilla", "flour_tortilla"], qty: "3" }, protein: { ids: ["chicken", "turkey", "beef", "beans", "tofu"], qty: "a palm-size portion" }, veg: { ids: ["peppers", "tomato", "greens"], qty: "1 cup" }, cheese: { ids: ["cheese"], qty: "a small handful", optional: true }, side: { ids: ["rice"], qty: "1 cup cooked" } },
-    steps: (p) => [`Cook ${p.protein} with mild taco spices.`, `Warm the ${p.shell}.`, `Fill with ${p.protein}${p.cheese ? `, ${p.veg} and ${p.cheese}` : ` and ${p.veg}`}. Serve with ${p.side}.`],
-  },
-  {
-    id: "sheet_pan", meals: ["dinner", "recovery"], days: ["recovery", "training", "rest"], minutes: 30,
-    title: (p) => `Baked ${p.protein} with ${p.carb}`,
-    slots: { protein: { ids: ["salmon", "chicken", "tofu"], qty: "a palm-size portion" }, carb: { ids: ["sweet_potato", "potato", "rice"], qty: "1 large or 1.5 cups" }, veg: { ids: ["broccoli", "greens", "carrots"], qty: "1 cup" }, fat: { ids: FAT, qty: "1 tbsp" }, lemon: { ids: ["lemon"], qty: "1 wedge", optional: true } },
-    steps: (p) => [`Heat the oven to 400°F.`, `Roast ${p.carb} in ${p.fat} for 25 minutes.`, `Add ${p.protein} and ${p.veg} for the last 12 to 15 minutes${p.lemon ? `, then squeeze ${p.lemon} on top` : ""}.`],
-  },
-  {
-    id: "stir_fry", meals: ["dinner"], days: ["training", "rest", "recovery"], minutes: 20,
-    title: (p) => `${cap(p.protein)} stir-fry`,
-    slots: { protein: { ids: ["chicken", "tofu", "shrimp", "beef"], qty: "a palm-size portion" }, veg: { ids: ["peppers", "broccoli", "carrots"], qty: "2 cups" }, sauce: { ids: SOY, qty: "2 tbsp" }, carb: { ids: ["rice", "pasta", "gf_pasta"], qty: "1.5 cups cooked" }, fat: { ids: FAT, qty: "1 tbsp" } },
-    steps: (p) => [`Cook ${p.carb}.`, `Stir-fry ${p.protein} in ${p.fat} on high heat, then add ${p.veg}.`, `Add ${p.sauce}, toss, and serve over ${p.carb}.`],
-  },
-  {
-    id: "soup", meals: ["lunch", "dinner"], days: ALL, minutes: 30,
-    title: (p) => `${cap(p.protein)} and ${p.carb} soup`,
-    slots: { protein: { ids: ["chicken", "turkey", "tofu", "lentils"], qty: "a palm-size portion" }, carb: { ids: ["rice", "pasta", "gf_pasta", "potato"], qty: "1 cup" }, veg: { ids: ["carrots", "greens"], qty: "1 cup" }, broth: { ids: ["broth"], qty: "3 cups" } },
-    steps: (p) => [`Simmer ${p.broth} with ${p.veg}.`, `Add ${p.protein} and ${p.carb} and cook until done, about 15 minutes.`, "Great on cold days and when appetite is low."],
-  },
-  {
-    id: "wrap", meals: ["lunch"], days: ALL, minutes: 5,
-    title: (p) => `${cap(p.protein)} wrap`,
-    slots: { wrap: { ids: ["flour_tortilla", "corn_tortilla", "gf_toast"], qty: "1 large" }, protein: { ids: ["turkey", "chicken", "hummus", "eggs"], qty: "3 to 4 oz" }, veg: { ids: ["greens", "cucumber", "tomato", "carrots"], qty: "a handful" }, cheese: { ids: ["cheese"], qty: "1 slice", optional: true }, fruit: { ids: ["apple", "grapes", "orange", "banana"], qty: "1 serving" } },
-    steps: (p) => [`Fill ${p.wrap} with ${p.protein}${p.cheese ? `, ${p.veg} and ${p.cheese}` : ` and ${p.veg}`}.`, `Pack ${p.fruit} on the side. Easy school lunch.`],
-  },
-  {
-    id: "smoothie", meals: ["breakfast", "snack", "recovery"], days: ALL, minutes: 5,
-    title: () => "Recovery smoothie",
-    slots: { milk: { ids: MILKS, qty: "1 cup" }, fruit: { ids: ["banana", "berries"], qty: "1 cup" }, yog: { ids: YOGURT, qty: "1/2 cup", optional: true }, oats: { ids: ["oats"], qty: "1/4 cup", optional: true }, nut: { ids: ["pb", "sunbutter", "almond_butter"], qty: "1 tbsp", optional: true } },
-    steps: (p) => [`Blend ${p.milk}, ${p.fruit}${p.yog ? `, ${p.yog}` : ""}${p.oats ? `, ${p.oats}` : ""}${p.nut ? ` and ${p.nut}` : ""} with ice.`, "Drink within an hour after training."],
-  },
-  {
-    id: "snack_box", meals: ["snack"], days: ALL, minutes: 5,
-    title: () => "Snack box",
-    slots: { carb: { ids: ["crackers", "rice_cakes", "pretzels"], qty: "a handful" }, protein: { ids: ["cheese", "hummus", "turkey", "edamame"], qty: "a small portion" }, fruit: { ids: ["grapes", "apple", "orange", "berries"], qty: "1 serving" }, veg: { ids: ["carrots", "cucumber"], qty: "a handful", optional: true } },
-    steps: (p) => [`Pack ${p.carb}, ${p.protein}, ${p.fruit}${p.veg ? ` and ${p.veg}` : ""} in a container.`],
-  },
-  {
-    id: "rice_cake_stack", meals: ["snack"], days: ["match", "match_eve", "training"], minutes: 2,
-    title: (p) => `${cap(p.base)} with ${p.top}`,
-    slots: { base: { ids: ["rice_cakes", "toast", "gf_toast", "bagel"], qty: "2" }, top: { ids: ["jam", "honey", "banana", "sunbutter"], qty: "a thin layer" } },
-    steps: (p) => [`Spread ${p.top} on ${p.base}. A quick carb snack 1 to 2 hours before play.`],
-  },
-  {
-    id: "sweet_potato_bowl", meals: ["lunch", "dinner"], days: ["recovery", "rest", "training"], minutes: 35,
-    title: (p) => `Stuffed ${p.base.replace(/es$/, "")} with ${p.protein}`,
-    slots: { base: { ids: ["sweet_potato", "potato"], qty: "1 large" }, protein: { ids: ["beans", "chicken", "turkey", "tofu"], qty: "a palm-size portion" }, top: { ids: ["greek_yogurt", "lf_yogurt", "cheese"], qty: "2 tbsp", optional: true }, veg: { ids: ["greens", "peppers", "tomato"], qty: "1 cup" } },
-    steps: (p) => [`Bake or microwave ${p.base} until soft.`, `Split it and fill with ${p.protein} and ${p.veg}${p.top ? `, then top with ${p.top}` : ""}.`],
-  },
-];
-
-const cap = (s: string) => s.replace(/^(a |an )/, "").replace(/^\w/, (c) => c.toUpperCase());
-
-export interface Recipe {
-  id: string;
-  name: string;
-  meals: Meal[];
-  minutes: number;
-  ingredients: { name: string; qty: string }[];
-  steps: string[];
-  swaps: string[];
-}
-
-function build(def: RecipeDef, c: SafetyContext, avoidHeavy = false): Recipe | null {
-  const picks: Record<string, string> = {};
-  const ingredients: Recipe["ingredients"] = [];
-  const swaps: string[] = [];
-  for (const [key, slot] of Object.entries(def.slots)) {
-    const options = slot.ids.map((id) => food(id)).filter((f): f is Food => !!f);
-    const chosen = options.find((f) => isSafe(f, c) && !(avoidHeavy && f.heavy));
-    if (!chosen) {
-      if (slot.optional) continue;
-      return null;
-    }
-    if (chosen !== options[0]) swaps.push(`Uses ${chosen.name} to fit your food rules.`);
-    picks[key] = chosen.name;
-    ingredients.push({ name: chosen.name, qty: slot.qty });
-  }
-  return { id: def.id, name: def.title(picks), meals: def.meals, minutes: def.minutes, ingredients, steps: def.steps(picks), swaps };
-}
-
+/** Every recipe that fits this player's food rules and age (default kitchen). */
 export function safeRecipes(profile: AthleteProfile): Recipe[] {
-  const c = safetyContext(profile);
-  return RECIPES.map((d) => build(d, c)).filter((r): r is Recipe => !!r);
+  return recipeBook(profile).recipes;
 }
 
 export interface MealPlanDay {
@@ -193,9 +47,7 @@ const DAY_NOTE: Record<DayType, string> = {
 };
 
 /** A 7-day plan: breakfast, lunch, dinner and a snack, rotated so meals don't repeat back to back. */
-export function buildMealPlan(profile: AthleteProfile, from: string, days = 7): MealPlan {
-  const c = safetyContext(profile);
-  const gameC = safetyContext(profile, { gameDay: true });
+export function buildMealPlan(profile: AthleteProfile, from: string, days = 7, filter: RecipeFilter = {}): MealPlan {
   const used = new Map<string, number>();
   const out: MealPlanDay[] = [];
   const age = effectiveAge(profile.identity);
@@ -203,20 +55,16 @@ export function buildMealPlan(profile: AthleteProfile, from: string, days = 7): 
     const date = addDays(from, i);
     const t = classifyDay(profile, date);
     const gameish = t === "match" || t === "match_eve";
-    const ctx = gameish ? gameC : c;
     const meals: MealPlanDay["meals"] = [];
     for (const meal of ["breakfast", "lunch", "dinner", "snack"] as Meal[]) {
-      const candidates = RECIPES
-        .filter((d) => d.meals.includes(meal) && (d.minAge === undefined || (age ?? 99) >= d.minAge))
-        .map((d) => ({ d, r: build(d, ctx, gameish) }))
-        .filter((x): x is { d: RecipeDef; r: Recipe } => !!x.r)
+      const candidates = planCandidates(profile, meal, gameish, filter)
         .sort((a, b) => {
-          const fit = (x: RecipeDef) => (x.days.includes(t) ? 0 : 1);
-          return fit(a.d) - fit(b.d) || (used.get(a.d.id) ?? -9) - (used.get(b.d.id) ?? -9);
+          const fit = (x: { days: DayType[] }) => (x.days.includes(t) ? 0 : 1);
+          return fit(a) - fit(b) || (used.get(a.id) ?? -9) - (used.get(b.id) ?? -9);
         });
-      const choice = candidates.find((x) => (used.get(x.d.id) ?? -9) < i - 1) || candidates[0];
+      const choice = candidates.find((x) => (used.get(x.id) ?? -9) < i - 1) || candidates[0];
       if (!choice) continue;
-      used.set(choice.d.id, i);
+      used.set(choice.id, i);
       meals.push({ meal, recipe: choice.r });
     }
     out.push({ date, label: shortDate(date), dayType: t, note: DAY_NOTE[t], meals });
@@ -227,7 +75,7 @@ export function buildMealPlan(profile: AthleteProfile, from: string, days = 7): 
     "Cook once, eat twice: double the dinner recipe and use it for tomorrow's lunch.",
     "Always read labels. Recipes use safe choices, but brands change what's in them.",
   ];
-  return { from, days: out, recipes: safeRecipes(profile), tips };
+  return { from, days: out, recipes: recipeBook(profile, filter).recipes, tips };
 }
 
 // ---------------------------------------------------------------------------

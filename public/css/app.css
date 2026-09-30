@@ -435,3 +435,11 @@ table.med td { vertical-align: top; }
 .sponsor { font-size: 13px; color: var(--muted); text-align: center; margin: 12px 0; }
 @media print { table.med, table.med td { font-size: 11px; } .eh { color: #000 !important; } }
 .seg.scroll { margin-bottom: 12px; }
+.cookcard .chips .dim { font-size: 11px; margin-left: 4px; }
+.recipe summary .pill { margin-top: 6px; }
+.hsteps .who { display: inline-block; font-size: 11px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; background: rgba(255,200,87,.16); color: var(--warn); border-radius: 6px; padding: 1px 6px; margin-right: 4px; }
+details.rcard { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 14px 16px; margin: 0 0 10px; }
+details.rcard > summary { display: block; cursor: pointer; list-style: none; }
+details.rcard > summary::-webkit-details-marker { display: none; }
+details.rcard > summary b { font-size: 16px; }
+details.rcard[open] > summary { margin-bottom: 6px; }

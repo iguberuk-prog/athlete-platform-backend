@@ -7,11 +7,12 @@
  */
 
 import { randomUUID } from "node:crypto";
-import type { AthleteProfileRepository, CheckInRepository } from "../data/repository.js";
+import type { AthleteProfileRepository, CheckInRepository, RecordRepository } from "../data/repository.js";
 import type { AthleteProfile, ProfileInput } from "../domain/profile.js";
 import { buildHealthStatus, computeSweatTest, medianSweatRate, sweatAdvice, activeConcussion, type SweatTestInput } from "../domain/health.js";
 import { schoolDayPlan, travelPlans } from "../domain/dayplans.js";
-import { buildMealPlan, eatingOutGuide, safeRecipes } from "../domain/meals.js";
+import { buildMealPlan, eatingOutGuide } from "../domain/meals.js";
+import { recipeBook, vendorsEnabled, type RecipeFilter, type VendorProduct } from "../domain/recipes.js";
 import { featuresFor, type FeatureId } from "../domain/features.js";
 import { effectiveAge } from "../domain/profile.js";
 import type { WeatherProvider } from "../weather/nws.js";
@@ -35,6 +36,7 @@ export class HealthService {
     private readonly checkins: CheckInRepository,
     private readonly family: FamilyService,
     private readonly weather: WeatherProvider | null = null,
+    private readonly records?: RecordRepository,
   ) {}
 
   private async load(userId: string, id: string): Promise<{ owner: string; p: AthleteProfile } | null> {
@@ -140,15 +142,21 @@ export class HealthService {
     return { ok: true, value: saved };
   }
 
-  async meals(userId: string, id: string, from: string) {
-    const r = await this.load(userId, id);
-    if (!r) return { ok: false, code: "not_found" } as const;
-    return { ok: true, value: { plan: buildMealPlan(r.p, from, 7), eatingOut: eatingOutGuide(r.p) } } as const;
+  private async vendors(): Promise<VendorProduct[]> {
+    if (!this.records || !vendorsEnabled()) return [];
+    return (await this.records.listByKind<VendorProduct>("vendor", 500)).map((v) => v.data);
   }
 
-  async recipes(userId: string, id: string) {
+  async meals(userId: string, id: string, from: string, filter: RecipeFilter = {}) {
     const r = await this.load(userId, id);
     if (!r) return { ok: false, code: "not_found" } as const;
-    return { ok: true, value: safeRecipes(r.p) } as const;
+    return { ok: true, value: { plan: buildMealPlan(r.p, from, 7, filter), eatingOut: eatingOutGuide(r.p) } } as const;
+  }
+
+  /** Recipes this player can make, by age, kitchen, time and who's cooking. */
+  async recipes(userId: string, id: string, filter: RecipeFilter = {}, today?: string) {
+    const r = await this.load(userId, id);
+    if (!r) return { ok: false, code: "not_found" } as const;
+    return { ok: true, value: recipeBook(r.p, filter, { vendors: await this.vendors(), today }) } as const;
   }
 }

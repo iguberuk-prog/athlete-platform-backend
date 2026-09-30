@@ -14,6 +14,7 @@ import { buildMealPlan, eatingOutGuide, safeRecipes } from "../src/domain/meals.
 import { buildHealthStatus } from "../src/domain/health.js";
 import { schoolDayPlan, travelPlans } from "../src/domain/dayplans.js";
 import { teamMenu } from "../src/domain/teamMeal.js";
+import { recipeBook } from "../src/domain/recipes.js";
 import { tournamentPlans } from "../src/domain/tournament.js";
 import { nextUp } from "../src/domain/dayplans.js";
 import { positionFuel } from "../src/domain/daily.js";
@@ -111,6 +112,7 @@ function allText(p: AthleteProfile, withProgram = true): string {
   // New: meals, eating out, health, school day, travel, team menu.
   const withSchool = { ...p, routine: { ...(p.routine || {}), homeZip: "07039", school: { days: [1, 2, 3, 4, 5], start: "08:00", end: "15:00", lunch: "11:30" } } } as AthleteProfile;
   out.push(buildMealPlan(p, START, 7), buildMealPlan(p, addDays(START, 3), 7), safeRecipes(p), eatingOutGuide(p));
+  out.push(recipeBook(p, { who: "alone" }), recipeBook(p, { who: "together" }), recipeBook(p, { who: "parent", batch: true }), recipeBook(p, { have: ["microwave"] }), buildMealPlan(p, START, 7, { have: [] }));
   out.push(buildHealthStatus(p, [], addDays(START, 2)));
   for (let i = 0; i < 7; i++) out.push(schoolDayPlan(withSchool, addDays(START, i)));
   out.push(travelPlans({ ...withSchool, schedule: { events: [...(p.schedule?.events || []), { type: "tournament", startTime: `${addDays(START, 4)}T09:00`, importance: "high", zip: "90210" }] } } as AthleteProfile, START, WX));
@@ -129,7 +131,7 @@ function scrub(text: string, p: AthleteProfile): string {
   const safeNames = FOODS.filter((f) => isSafe(f, c)).map((f) => f.name.toLowerCase()).sort((a, b) => b.length - a.length);
   for (const n of safeNames) t = t.split(n).join(" ");
   // Neutral phrases that contain trigger words but aren't foods.
-  for (const phrase of ["gluten-free", "lactose-free", "dairy-free", "nut-free", "caffeine-free", "sports drink", "non-negotiable", "protein snack you tolerate", "proteins you tolerate", "calcium-fortified", "iron-fortified", "epinephrine", "gluten-free bread"].sort((a, b) => b.length - a.length))
+  for (const phrase of ["gluten-free", "lactose-free", "dairy-free", "nut-free", "caffeine-free", "sports drink", "non-negotiable", "protein snack you tolerate", "proteins you tolerate", "calcium-fortified", "iron-fortified", "epinephrine", "gluten-free bread", "toaster"].sort((a, b) => b.length - a.length))
     t = t.split(phrase.toLowerCase()).join(" ");
   return t;
 }
@@ -139,8 +141,8 @@ const WORDS: Record<string, RegExp> = {
   tree_nut: /almond|cashew|walnut|pecan|hazelnut|pistachio/,
   milk: /yogurt|whey|cheese|\bmilk\b|dairy|cottage|cocoa/,
   egg: /\beggs?\b/,
-  wheat: /pasta|bread|bagel|toast|pretzel|cracker|sandwich|couscous|noodle/,
-  gluten: /pasta|bread|bagel|toast|pretzel|cracker|sandwich|couscous|noodle/,
+  wheat: /pasta|bread|bagel|toast(?!er)|pretzel|cracker|sandwich|couscous|noodle/,
+  gluten: /pasta|bread|bagel|toast(?!er)|pretzel|cracker|sandwich|couscous|noodle/,
   soy: /\bsoy\b|tofu|edamame/,
   fish: /salmon|tuna|\bfish\b|sardine/,
   shellfish: /shrimp|shellfish/,
@@ -170,7 +172,7 @@ const cases: Case[] = [
   { name: "medical:low_fodmap", nut: { medicalDiets: ["low_fodmap"] }, words: [/honey|\bapple|lentil|\bbeans\b|hummus|greek yogurt|chocolate milk/] },
   { name: "free-text allergy: banana", nut: { allergies: [{ allergen: "other", severity: "moderate", note: "banana" }] }, words: [/banana/] },
   { name: "dislikes: fish, eggs", nut: { dislikes: ["fish", "eggs"] }, words: [/salmon|tuna|\bfish\b|\beggs?\b/] },
-  { name: "combo: vegan + peanut + gluten-free", nut: { dietaryRestrictions: ["vegan", "gluten_free"], allergies: [{ allergen: "peanut", severity: "severe" }] }, words: [/peanut|chicken|yogurt|\bmilk\b|pasta|bagel|toast|honey/] },
+  { name: "combo: vegan + peanut + gluten-free", nut: { dietaryRestrictions: ["vegan", "gluten_free"], allergies: [{ allergen: "peanut", severity: "severe" }] }, words: [/peanut|chicken|yogurt|\bmilk\b|pasta|bagel|toast(?!er)|honey/] },
 ];
 
 const AGES: [string, string][] = [

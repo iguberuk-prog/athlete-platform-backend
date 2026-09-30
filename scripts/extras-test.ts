@@ -18,6 +18,7 @@ import { aisleFor, buildGroceryList } from "../src/domain/grocery.js";
 import { dailyTargets, positionFuel } from "../src/domain/daily.js";
 import { nextUp } from "../src/domain/dayplans.js";
 import { mentalSkills } from "../src/domain/mental.js";
+import { recipeBook } from "../src/domain/recipes.js";
 import { addDays } from "../src/domain/dates.js";
 import { FamilyService } from "../src/services/familyService.js";
 import { PlayerService } from "../src/services/playerService.js";
@@ -169,6 +170,43 @@ console.log("\nAsk the app: safety filter");
   check("reflection counts toward badges", pr!.badges.find((x) => x.id === "reflect5")!.progress === 1);
   const sr = await ps.seasonReview("o9", saved.id, TODAY);
   check("season review", sr!.stats.goals === 1 && sr!.highlights[0].text === "Won headers");
+}
+
+console.log("\nRecipes by age and kitchen");
+{
+  const kid = prof("2018-06-01"), junior = prof("2014-06-01"), teen = prof("2011-06-01");
+  const k = recipeBook(kid, { who: "alone" });
+  check("7-year-old alone: no-cook only", k.cook.id === "little" && k.recipes.length >= 5 && k.recipes.every((r) => r.level === 1));
+  check("7-year-old alone: nothing with heat or knives in steps", k.recipes.every((r) => r.steps.every((s) => !s.uses || s.uses === "freezer")));
+  const kt = recipeBook(kid, { who: "together" });
+  const pasta = kt.recipes.find((r) => r.id === "pasta_night")!;
+  check("cook together: grown-up does the stove steps, kid does the rest", pasta.mode === "together" && pasta.steps.filter((s) => s.uses === "stove").every((s) => s.who === "grown-up") && pasta.steps.some((s) => s.who === "you"));
+  check("kid tips shown for young kids only", !!kt.recipes.find((r) => r.kidTip) && !recipeBook(teen).recipes.some((r) => r.kidTip));
+  const j = recipeBook(junior, { who: "alone" });
+  check("11-year-old alone: microwave, toaster, blender yes; stove and oven no", j.recipes.some((r) => r.equipment.includes("microwave")) && !j.recipes.some((r) => r.equipment.some((e) => e === "stove" || e === "oven" || e === "knife")));
+  const t = recipeBook(teen, { who: "alone" });
+  check("14-year-old alone: stovetop recipes included", t.cook.id === "home" && t.recipes.some((r) => r.equipment.includes("stove")) && t.recipes.every((r) => r.mode === "alone"));
+  check("kitchen filter: microwave only", recipeBook(teen, { have: ["microwave"] }).recipes.every((r) => r.equipment.every((e) => e === "microwave")));
+  check("time filter", recipeBook(teen, { maxMinutes: 10 }).recipes.every((r) => r.minutes <= 10));
+  check("batch cooking filter", recipeBook(teen, { batch: true }).recipes.length >= 3 && recipeBook(teen, { batch: true }).recipes.every((r) => r.batch));
+  check("unlock counts for the picker", (recipeBook(teen).unlocks.stove ?? 0) > 5);
+  const nut = prof("2011-06-01", { nutrition: { allergies: [{ allergen: "peanut", severity: "severe" }], dietaryRestrictions: [], intolerances: [], dislikes: [] } });
+  check("recipes still follow allergies", !JSON.stringify(recipeBook(nut).recipes).toLowerCase().includes("peanut"));
+  const vendors = [
+    { id: "v1", brand: "BrandCo", product: "Protein Pasta", replaces: "pasta", allergens: ["wheat", "gluten"], gluten: true, active: true },
+    { id: "v2", brand: "NutCo", product: "Crunchy Spread", replaces: "sunbutter", allergens: ["peanut"], active: true },
+    { id: "v3", brand: "OldCo", product: "Rice", replaces: "rice", active: true, end: "2020-01-01" },
+  ];
+  const off = recipeBook(teen, {}, { vendors, today: TODAY });
+  check("vendor placements off by default", !JSON.stringify(off).includes("BrandCo"));
+  process.env.VENDOR_PLACEMENTS = "on";
+  const on = recipeBook(teen, {}, { vendors, today: TODAY });
+  check("switched on: sponsored product shown on the ingredient", on.recipes.some((r) => r.ingredients.some((i) => i.sponsored?.brand === "BrandCo")));
+  check("sponsored product never shown if unsafe for the player", !JSON.stringify(recipeBook(nut, {}, { vendors, today: TODAY })).includes("NutCo"));
+  check("expired placement not shown", !JSON.stringify(on).includes("OldCo"));
+  const gf = prof("2011-06-01", { nutrition: { allergies: [], dietaryRestrictions: ["gluten_free"], intolerances: [], dislikes: [] } });
+  check("wheat pasta brand never shown to a gluten-free player", !JSON.stringify(recipeBook(gf, {}, { vendors, today: TODAY })).includes("BrandCo"));
+  delete process.env.VENDOR_PLACEMENTS;
 }
 
 console.log(`\nExtras tests: ${passed} passed, ${failed} failed`);

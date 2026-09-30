@@ -67,6 +67,7 @@ interface Services {
   hub: TeamHubService;
   billing: BillingService;
   market: MarketService;
+  records: RecordRepository;
 }
 
 function wire(p: AthleteProfileRepository, c: CheckInRepository, t: TeamRepository, r: RecordRepository): Services {
@@ -86,7 +87,7 @@ function wire(p: AthleteProfileRepository, c: CheckInRepository, t: TeamReposito
     teams: new TeamService(t, p, c, family, mailer),
     account: new AccountService(p, c, t, r),
     family,
-    health: new HealthService(p, c, family, weather),
+    health: new HealthService(p, c, family, weather, r),
     calendar: new CalendarService(p, family),
     products: new ProductService(p, family, r),
     reports: new ReportService(p, c, family, r, mailer),
@@ -97,6 +98,7 @@ function wire(p: AthleteProfileRepository, c: CheckInRepository, t: TeamReposito
     clubs, hub: new TeamHubService(p, c, t, r, family, clubs),
     billing: new BillingService(clubs, r),
     market: new MarketService(p, family, r, clubs, mailer),
+    records: r,
   };
 }
 
@@ -168,3 +170,4 @@ export const getClubService = () => getServices().clubs;
 export const getTeamHubService = () => getServices().hub;
 export const getBillingService = () => getServices().billing;
 export const getMarketService = () => getServices().market;
+export const getRecordRepository = () => getServices().records;

@@ -22,7 +22,7 @@ import { featuresFor } from "../domain/features.js";
 import { effectiveAge } from "../domain/profile.js";
 import { teamMenu } from "../domain/teamMeal.js";
 import { parseIcs, toScheduled } from "../domain/ics.js";
-import { isFeedUrl } from "../domain/validation.js";
+import { normalizeFeedUrl } from "./calendarService.js";
 import type { FamilyService } from "./familyService.js";
 import type { ClubService } from "./clubService.js";
 import { fetchFeed } from "./calendarService.js";
@@ -296,7 +296,9 @@ export class TeamHubService {
       await this.pushEvents(teamId, []);
       return { ok: true, value: { count: 0 } };
     }
-    if (!isFeedUrl(url.replace(/^webcal:/i, "https:"))) return { ok: false, code: "invalid", message: "Paste the team calendar's subscribe link." };
+    const clean = normalizeFeedUrl(url);
+    if (!clean) return { ok: false, code: "invalid", message: "Paste the team calendar's subscribe link." };
+    url = clean;
     await this.records.put({ id: teamId, kind: "teamfeed", key: teamId, ownerId: userId, data: { url } });
     return { ok: true, value: await this.syncFeed(teamId) };
   }

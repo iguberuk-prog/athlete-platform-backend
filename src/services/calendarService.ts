@@ -25,14 +25,39 @@ export function feedLinkIn(html: string, base: string): string | null {
   try { return new URL(pick.replace(/^webcal:/i, "https:"), base).toString(); } catch { return null; }
 }
 
+/**
+ * Clean up whatever a parent pasted: spaces, quotes, extra words around the link,
+ * webcal:// or http:// (both become https://). Returns null when there's no link in it.
+ */
+export function normalizeFeedUrl(raw: string): string | null {
+  const text = String(raw || "").replace(/[\u200B-\u200D\uFEFF]/g, "").trim();
+  const m = text.match(/(webcals?|https?):\/\/[^\s"'<>]+/i) || text.match(/^(?:www\.)?[a-z0-9-]+(?:\.[a-z0-9-]+)+\/[^\s"'<>]*/i);
+  if (!m) return null;
+  let u = m[0].replace(/[),.;]+$/, "");
+  if (!/^[a-z]+:\/\//i.test(u)) u = "https://" + u;
+  u = u.replace(/^webcals?:\/\//i, "https://").replace(/^http:\/\//i, "https://");
+  return isFeedUrl(u) ? u : null;
+}
+
+async function get(url: string, signal: AbortSignal) {
+  const init = { signal, headers: { Accept: "text/calendar, text/plain, */*", "User-Agent": "AthletePerformance/1.0 calendar-sync" } };
+  try {
+    return await fetch(url, init);
+  } catch (e) {
+    // A few calendar servers still only answer on plain http.
+    if (signal.aborted) throw e;
+    return fetch(url.replace(/^https:/i, "http:"), init);
+  }
+}
+
 export async function fetchFeed(url: string, depth = 0): Promise<string> {
-  const https = url.replace(/^webcal:/i, "https:");
+  const https = normalizeFeedUrl(url) || url;
   if (!isFeedUrl(https)) throw new Error("That doesn't look like a calendar link.");
   const ctl = new AbortController();
   const t = setTimeout(() => ctl.abort(), 8000);
   try {
-    const res = await fetch(https, { signal: ctl.signal, headers: { Accept: "text/calendar, text/plain, */*", "User-Agent": "AthletePerformance/1.0 calendar-sync" } });
-    if (!isFeedUrl(res.url || https)) throw new Error("The calendar link redirected somewhere we can't use.");
+    const res = await get(https, ctl.signal);
+    if (!isFeedUrl((res.url || https).replace(/^http:/i, "https:"))) throw new Error("The calendar link redirected somewhere we can't use.");
     if (!res.ok) throw new Error(`The calendar site answered ${res.status}. Check the link.`);
     const text = await res.text();
     if (text.length > MAX_BYTES) throw new Error("That calendar is too large.");
@@ -75,16 +100,17 @@ export class CalendarService {
     return p ? { owner, p } : null;
   }
 
-  async add(userId: string, id: string, url: string, name?: string, defaultZip?: string): Promise<CalResult<AthleteProfile>> {
+  async add(userId: string, id: string, rawUrl: string, name?: string, defaultZip?: string): Promise<CalResult<AthleteProfile>> {
     const r = await this.load(userId, id);
     if (!r) return { ok: false, code: "not_found" };
-    if (!isFeedUrl(String(url || "").replace(/^webcal:/i, "https:"))) return { ok: false, code: "invalid", message: "Paste the calendar's subscribe link (it starts with webcal:// or https://)." };
+    const url = normalizeFeedUrl(rawUrl);
+    if (!url) return { ok: false, code: "invalid", message: "That doesn't contain a web link. Copy the whole calendar link (it starts with webcal://, https:// or http://)." };
     if (defaultZip && !/^\d{5}$/.test(defaultZip)) return { ok: false, code: "invalid", message: "ZIP must be 5 digits." };
     const feeds = r.p.schedule?.feeds || [];
     if (feeds.length >= 6) return { ok: false, code: "invalid", message: "Up to 6 team calendars per player." };
     if (feeds.some((f) => f.url === url)) return { ok: false, code: "invalid", message: "That calendar is already added." };
     const app = detectApp(url);
-    const feed: CalendarFeed = { id: randomUUID(), url: url.trim(), kind: "ics", app: app?.id, name: String(name || (app && app.id !== "ical" ? (app.id === "google" ? "Google calendar" : `${app.name} calendar`) : "Team calendar")).slice(0, 60), defaultZip: defaultZip || undefined };
+    const feed: CalendarFeed = { id: randomUUID(), url, kind: "ics", app: app?.id, name: String(name || (app && app.id !== "ical" ? (app.id === "google" ? "Google calendar" : `${app.name} calendar`) : "Team calendar")).slice(0, 60), defaultZip: defaultZip || undefined };
     const synced = await this.syncOne({ ...r.p, schedule: { ...(r.p.schedule || { events: [] }), feeds: [...feeds, feed] } }, feed.id);
     const added = synced.schedule?.feeds?.find((f) => f.id === feed.id);
     if (added?.lastError) return { ok: false, code: "invalid", message: added.lastError };

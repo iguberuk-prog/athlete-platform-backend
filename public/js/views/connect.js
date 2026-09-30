@@ -54,7 +54,7 @@ function appDetail(a) {
 function linkForm(a) {
   return `<form data-submit="cnAddLink" data-app="${a.id}" class="cnform" novalidate>
     <label class="f" for="cnUrl-${a.id}">Paste the calendar link</label>
-    <input class="input" id="cnUrl-${a.id}" placeholder="webcal://… or https://…" autocomplete="off" inputmode="url">
+    <input class="input" id="cnUrl-${a.id}" placeholder="Paste the whole link here" autocomplete="off" inputmode="url">
     <div class="row2" style="margin-top:8px"><input class="input" id="cnName-${a.id}" placeholder="Name (e.g. U14 Lions)" maxlength="60"><input class="input" id="cnZip-${a.id}" inputmode="numeric" maxlength="5" placeholder="Home field ZIP"></div>
     <button class="btn primary block" style="margin-top:8px">Add calendar</button></form>`;
 }

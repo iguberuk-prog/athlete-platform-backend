@@ -15,7 +15,7 @@ import type { ProfileInput } from "../src/domain/profile.js";
 import { TEAM_APPS, detectApp, googleToScheduled, teamsnapToScheduled } from "../src/domain/teamApps.js";
 import { validateProfileInput } from "../src/domain/validation.js";
 import { FamilyService } from "../src/services/familyService.js";
-import { CalendarService, feedLinkIn } from "../src/services/calendarService.js";
+import { CalendarService, feedLinkIn, normalizeFeedUrl } from "../src/services/calendarService.js";
 import { ConnectService } from "../src/services/connectService.js";
 
 let passed = 0, failed = 0;
@@ -33,6 +33,15 @@ check("detect PlayMetrics link", detectApp("https://api.playmetrics.com/calendar
 check("detect GameChanger link", detectApp("webcal://api.team-manager.gc.com/ics-calendar-documents/x.ics")?.id === "gamechanger");
 check("unknown host: no guess", detectApp("https://example.org/cal.ics") === undefined);
 check("junk: no crash", detectApp("not a url") === undefined);
+
+// ---- messy pastes ----
+check("paste: http:// becomes https://", normalizeFeedUrl("http://ical.teamsnap.com/team_schedule/abc.ics") === "https://ical.teamsnap.com/team_schedule/abc.ics");
+check("paste: webcal:// becomes https://", normalizeFeedUrl("webcal://ical.teamsnap.com/x.ics") === "https://ical.teamsnap.com/x.ics");
+check("paste: spaces and quotes trimmed", normalizeFeedUrl('  "webcal://a.teamsnap.com/x.ics"  \n') === "https://a.teamsnap.com/x.ics");
+check("paste: link inside other words", normalizeFeedUrl("Full calendar: webcal://a.teamsnap.com/x.ics (copy this)") === "https://a.teamsnap.com/x.ics");
+check("paste: no protocol", normalizeFeedUrl("go.teamsnap.com/ical/123.ics") === "https://go.teamsnap.com/ical/123.ics");
+check("paste: plain words refused", normalizeFeedUrl("my team calendar") === null);
+check("paste: local addresses refused", normalizeFeedUrl("http://192.168.1.5/cal.ics") === null);
 
 // ---- pasted a page instead of the feed ----
 check("page link: finds webcal link", feedLinkIn('<a href="/help">Help</a><a href="webcal://club.sportngin.com/ical/team/9.ics">Subscribe</a>', "https://club.sportngin.com/schedule") === "https://club.sportngin.com/ical/team/9.ics");
@@ -166,6 +175,9 @@ const svc = new ConnectService(profiles, family, records, calendar, http);
   const synced = await calendar.syncProfile("u1", cur);
   check("daily sync: every feed synced without errors", !!synced && synced.schedule!.feeds!.every((f) => !f.lastError && f.lastSyncedAt), JSON.stringify(synced?.schedule?.feeds?.map((f) => f.lastError)));
   check("saved profile stays valid", validateProfileInput(synced as any).valid, JSON.stringify(validateProfileInput(synced as any).errors));
+
+  const httpAdd = await calendar.add("u1", p.id, "  Full calendar: http://ical.teamsnap.com/team_schedule/9.ics ");
+  check("add: messy TeamSnap http link accepted and cleaned", httpAdd.ok && httpAdd.value.schedule!.feeds!.some((f) => f.url === "https://ical.teamsnap.com/team_schedule/9.ics" && f.app === "teamsnap" && f.name === "TeamSnap calendar"));
 
   // A bad link is refused on the first add, not saved with an error
   const badCal = new CalendarService(profiles, family, async () => { throw new Error("The calendar site answered 404. Check the link."); });

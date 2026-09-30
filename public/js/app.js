@@ -36,6 +36,7 @@ import * as season from "./views/season.js";
 import * as ask from "./views/ask.js";
 import * as fun from "./views/fun.js";
 import * as connect from "./views/connect.js";
+import * as invite from "./views/invite.js";
 
 export const state = {
   user: null,          // { email, role }
@@ -48,12 +49,12 @@ const VIEWS = {
   today, gameday, recovery, checkin, more, schedule, trends, grocery, team,
   profile, program, reminders: settings, account: settings,
   health, meals, scan, devices, family, report, club, teamhub, experts,
-  journal, progress, mind, tournament, emergency, safesport, budget, season, ask, fun, connect,
+  journal, progress, mind, tournament, emergency, safesport, budget, season, ask, fun, connect, invite,
 };
 
 // Views register click handlers by name; buttons carry data-act="name".
 const actions = {};
-for (const v of [auth, profile, today, gameday, recovery, checkin, more, schedule, trends, grocery, team, settings, program, health, meals, scan, devices, family, report, club, teamhub, experts, journal, progress, mind, tournament, emergency, safesport, budget, season, ask, fun, connect]) {
+for (const v of [auth, profile, today, gameday, recovery, checkin, more, schedule, trends, grocery, team, settings, program, health, meals, scan, devices, family, report, club, teamhub, experts, journal, progress, mind, tournament, emergency, safesport, budget, season, ask, fun, connect, invite]) {
   Object.assign(actions, v.actions || {});
 }
 
@@ -116,7 +117,7 @@ const TITLES = {
   reminders: "Reminders", account: "Account", program: "My program",
   health: "Health", meals: "Meals", scan: "Scan food", devices: "Devices", family: "Family", report: "Weekly report",
   club: "Club", teamhub: "Team", experts: "Dietitians and camps",
-  journal: "Journal", progress: "Progress", mind: "Mental skills", tournament: "Tournament", emergency: "Emergency card", safesport: "Safe sport", budget: "Season budget", season: "Season review", ask: "Ask", fun: "Fun", connect: "Team apps",
+  journal: "Journal", progress: "Progress", mind: "Mental skills", tournament: "Tournament", emergency: "Emergency card", safesport: "Safe sport", budget: "Season budget", season: "Season review", ask: "Ask", fun: "Fun", connect: "Team apps", invite: "Invite a friend",
 };
 
 const FUN_TITLES = { quiz: "Car ride quiz", cook: "Family cook night", hunt: "Grocery hunt", wrapped: "Season wrapped" };
@@ -139,6 +140,12 @@ export async function render() {
     if (state.route.query.code) storeSet("pendingJoin", String(state.route.query.code).toUpperCase().slice(0, 8));
     history.replaceState(null, "", state.user ? "#/team" : "#/signup");
     state.route = parseHash();
+  }
+
+  if (state.route.name === "invite" && state.route.query.code) {
+    storeSet("pendingInvite", String(state.route.query.code).toUpperCase().slice(0, 12));
+    if (!state.user) { await invite.renderLanding(app, state.route.query); return; }
+    history.replaceState(null, "", "#/today"); state.route = parseHash(); redeemInvite();
   }
 
   if (!state.user) {
@@ -246,9 +253,18 @@ window.addEventListener("hashchange", render);
 window.addEventListener("online", () => $("#offline")?.setAttribute("hidden", ""));
 window.addEventListener("offline", () => $("#offline")?.removeAttribute("hidden"));
 
+/** Count this new account for the friend who invited it (once). */
+async function redeemInvite() {
+  const code = storeGet("pendingInvite", "");
+  if (!code) return;
+  storeSet("pendingInvite", "");
+  await api("/api/invite/redeem", { method: "POST", body: { code } }).catch(() => {});
+}
+
 export async function afterSignIn() {
   state.user = await currentUser();
   if (!state.user) { render(); return; }
+  redeemInvite();
   await loadProfiles();
   await loadClub().catch(() => {});
   if (!location.hash || location.hash === "#/" || location.hash.startsWith("#/login") || location.hash.startsWith("#/signup")) {

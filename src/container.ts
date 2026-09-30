@@ -41,6 +41,7 @@ import { BillingService } from "./services/billingService.js";
 import { MarketService } from "./services/marketService.js";
 import { FunService } from "./services/funService.js";
 import { ConnectService } from "./services/connectService.js";
+import { InviteService } from "./services/inviteService.js";
 import { ProfileService } from "./services/profileService.js";
 import { CheckInService } from "./services/checkinService.js";
 import { PlanService } from "./services/planService.js";
@@ -72,6 +73,7 @@ interface Services {
   records: RecordRepository;
   fun: FunService;
   connect: ConnectService;
+  invite: InviteService;
 }
 
 function wire(p: AthleteProfileRepository, c: CheckInRepository, t: TeamRepository, r: RecordRepository): Services {
@@ -106,6 +108,7 @@ function wire(p: AthleteProfileRepository, c: CheckInRepository, t: TeamReposito
     records: r,
     fun: new FunService(p, c, family, r),
     connect: new ConnectService(p, family, r, calendar),
+    invite: new InviteService(r, mailer),
   };
 }
 
@@ -180,3 +183,4 @@ export const getMarketService = () => getServices().market;
 export const getRecordRepository = () => getServices().records;
 export const getFunService = () => getServices().fun;
 export const getConnectService = () => getServices().connect;
+export const getInviteService = () => getServices().invite;

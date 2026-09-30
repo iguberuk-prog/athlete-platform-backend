@@ -90,7 +90,8 @@ export default async (req: Request, context: Context): Promise<Response> => {
         }
         const own = await service.list(ownerId);
         // Profiles shared with this account through a family link.
-        const linked = (await getFamilyService().linkedProfiles(ownerId)).map((p) => ({ ...p, shared: true }));
+        // A problem with family links must never hide the caller's own profiles.
+        const linked = (await getFamilyService().linkedProfiles(ownerId).catch((e) => { console.error("linkedProfiles failed", e); return []; })).map((p) => ({ ...p, shared: true }));
         return json({ profiles: [...own, ...linked].map(withFeatures) });
       }
 

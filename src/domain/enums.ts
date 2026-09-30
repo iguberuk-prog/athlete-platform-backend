@@ -48,6 +48,11 @@ export const COMPETITION_LEVELS = [
   "high_school",
   "college",
   "professional",
+  // Adults
+  "amateur",
+  "rec_league",
+  "over_age_league",
+  "training_only",
 ] as const;
 export type CompetitionLevel = (typeof COMPETITION_LEVELS)[number];
 

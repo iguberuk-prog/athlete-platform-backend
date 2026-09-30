@@ -27,7 +27,7 @@ const MEDICAL = [["celiac", "Celiac disease"], ["type1_diabetes", "Type 1 diabet
 const DIETS = [["vegetarian", "Vegetarian"], ["vegan", "Vegan"], ["pescatarian", "Pescatarian"], ["halal", "Halal"], ["kosher", "Kosher"], ["no_pork", "No pork"], ["no_red_meat", "No red meat"], ["dairy_free", "Dairy-free"], ["gluten_free", "Gluten-free"], ["nut_free", "Nut-free"]];
 const INTOL = [["lactose", "Lactose"], ["gluten", "Gluten sensitivity"], ["fructose", "Fructose"], ["caffeine", "Caffeine"]];
 const LABEL = Object.fromEntries([...ALLERGENS, ...MEDICAL, ...DIETS, ...INTOL.map(([k, v]) => ["i:" + k, v])]);
-const STEP_TITLES = ["", "Food safety", "About the athlete", "Body and routine", "Review and confirm"];
+const STEP_TITLES = ["", "Food safety", "About the athlete", "Body and routine", "Contacts"];
 const STEPS = 4;
 
 let pendingAvatar = null;
@@ -105,6 +105,7 @@ function foodSection(p) {
         <input class="input" id="dislikes" placeholder="e.g. fish, eggs, mushrooms" value="${esc((n.dislikes || []).join(", "))}">
         <div class="hint">We leave these out of every plan and grocery list.</div>
       </div>
+      <label class="check confirm"><input type="checkbox" id="confirmSafety" ${p?.nutrition?.safetyConfirmedAt ? "checked" : ""}><span><b>This food-safety information is complete and correct.</b> ${whoCap()} will only see foods that fit it. I'll update it if anything changes.</span></label>
     </section>`;
 }
 
@@ -135,9 +136,7 @@ function aboutSection(p) {
         <div><label class="f" for="position">Position</label><select class="input" id="position"></select></div>
       </div>
       <div class="row2">
-        <div><label class="f" for="level">Level</label><select class="input" id="level">
-          ${[["recreational", "Recreational / club"], ["high_school", "High school"], ["college", "College"], ["professional", "Professional"]].map(([v, l]) =>
-            `<option value="${v}" ${(sp.competitionLevel || "high_school") === v ? "selected" : ""}>${l}</option>`).join("")}</select></div>
+        <div><label class="f" for="level">Level</label><select class="input" id="level" data-level="${esc(sp.competitionLevel || "")}">${levelOptions(ageFromDob(id.dateOfBirth || ""), sp.competitionLevel)}</select></div>
         <div><label class="f" for="jersey">Jersey # <span class="dim">(optional)</span></label><input class="input" id="jersey" inputmode="numeric" value="${id.jerseyNumber ?? ""}"></div>
       </div>
       <label class="f" for="club">Team or school <span class="dim">(optional)</span></label>
@@ -191,7 +190,7 @@ function reviewSection(p) {
   return `
     <section data-step="4">
       <div id="reviewBox"></div>
-      <h3 style="margin-top:20px">Parent and emergency contact</h3>
+      <h3 style="margin-top:4px">Parent and emergency contact</h3>
       <div class="row2">
         <div><label class="f" for="parEmail">Parent email</label><input class="input" id="parEmail" type="email" inputmode="email" value="${esc(ct.parentEmail || "")}"></div>
         <div><label class="f" for="parPhone">Parent phone</label><input class="input" id="parPhone" type="tel" value="${esc(ct.parentPhone || "")}"></div>
@@ -201,7 +200,6 @@ function reviewSection(p) {
         <div><label class="f" for="emPhone">Their phone</label><input class="input" id="emPhone" type="tel" value="${esc(ct.emergencyContact?.phone || "")}"></div>
       </div>
       <label class="check"><input type="checkbox" id="weeklyReport" ${p?.notifications?.weeklyReport === false ? "" : "checked"}><span>Email parents a weekly report <span class="dim">(players under 18)</span></span></label>
-      <label class="check confirm"><input type="checkbox" id="confirmSafety"><span><b>This food-safety information is complete and correct.</b> ${whoCap()} will only see foods that fit it. I'll update it if anything changes.</span></label>
     </section>`;
 }
 
@@ -226,6 +224,15 @@ function renderAllergyDetails() {
   }).join("") : "";
 }
 
+// Level choices depend on age: kids and teens play youth or school soccer, adults play amateur, rec, over-age or just train.
+const YOUTH_LEVELS = [["recreational", "Recreational / club"], ["high_school", "High school"], ["college", "College"]];
+const ADULT_LEVELS = [["amateur", "Amateur league"], ["rec_league", "Rec league"], ["over_age_league", "Over-30 / geezer league"], ["training_only", "Practice and training only"], ["college", "College"], ["professional", "Professional"]];
+function levelOptions(age, current) {
+  const list = Number.isFinite(age) && age >= 19 ? ADULT_LEVELS : YOUTH_LEVELS;
+  const pick = list.some(([v]) => v === current) ? current : list[0][0];
+  return list.map(([v, l]) => `<option value="${v}" ${v === pick ? "selected" : ""}>${l}</option>`).join("");
+}
+
 function renderProgramPreview() {
   const el = $("#programPreview");
   if (!el) return;
@@ -244,38 +251,13 @@ function renderReview() {
   const el = $("#reviewBox");
   if (!el) return;
   const keys = allergyKeys();
-  const rows = [];
-  if (fs.answer === "no" && !keys.length) rows.push(["Allergies", "None"]);
-  for (const k of keys) {
-    const d = detailFor(k);
-    const name = k.startsWith("other:") ? k.slice(6) : LABEL[k] || k;
-    const bits = [d.severity];
-    if (d.anaphylaxis) bits.push("anaphylaxis history");
-    if (d.epinephrine) bits.push("carries EpiPen");
-    if (d.cross || d.severity === "severe") bits.push("avoid may-contain");
-    rows.push(["Allergy", `${name} (${bits.join(", ")})`]);
-  }
-  const med = checked("medical").map((k) => LABEL[k]);
-  const diets = checked("diets").map((k) => LABEL[k]);
-  const intol = checked("intol").map((k) => LABEL["i:" + k]);
-  const dis = val("dislikes");
-  if (med.length) rows.push(["Medical diet", med.join(", ")]);
-  if (diets.length) rows.push(["Diet", diets.join(", ")]);
-  if (intol.length) rows.push(["Intolerances", intol.join(", ")]);
-  if (dis) rows.push(["Won't eat", dis]);
-  if (!rows.length) rows.push(["Food safety", "No restrictions"]);
   const epi = keys.some((k) => detailFor(k).epinephrine || detailFor(k).anaphylaxis);
   const t1d = checked("medical").includes("type1_diabetes");
   const age = ageFromDob(val("dob"));
   const prog = programFor(age);
   el.innerHTML = `
-    <div class="card tight" style="background:var(--bg2)">
-      <h3>Food safety</h3>
-      <ul class="list">${rows.map(([a, b]) => `<li><div style="flex:1"><div class="rowsub">${esc(a)}</div><div class="rowtitle">${esc(b)}</div></div></li>`).join("")}</ul>
-      ${epi ? `<div class="warnbox" style="margin-top:10px">We'll remind ${who()} to pack the EpiPen for every game, and flag it for the coach.</div>` : ""}
-      ${t1d ? `<div class="warnbox">Type 1 diabetes: our carb timing is general guidance. Build the game-day plan with ${isParent() ? "your athlete's" : "your"} diabetes care team.</div>` : ""}
-      <p class="hint">Every plan, reminder and grocery list is filtered against this list. Packaged foods can change, so always read labels.</p>
-    </div>
+    ${epi ? `<div class="warnbox">We'll remind ${who()} to pack the EpiPen for every game, and flag it for the coach.</div>` : ""}
+    ${t1d ? `<div class="warnbox">Type 1 diabetes: our carb timing is general guidance. Build the game-day plan with ${isParent() ? "your athlete's" : "your"} diabetes care team.</div>` : ""}
     ${prog ? `<div class="card tight" style="background:var(--bg2)"><h3>Program</h3><div class="rowtitle">${esc(prog.name)} · ages ${esc(prog.ages)}</div><div class="rowsub">${esc(prog.tagline)}</div></div>` : ""}`;
 }
 
@@ -334,14 +316,14 @@ export async function render(el, ctx) {
   } else {
     const unconfirmed = !p.nutrition?.safetyConfirmedAt;
     el.innerHTML = `
-      ${unconfirmed ? `<div class="warnbox">Please review the food-safety questions below and confirm them at the bottom.</div>` : ""}
+      ${unconfirmed ? `<div class="warnbox">Please review the food-safety questions below and tick the confirm box under them.</div>` : ""}
       <form class="card" data-submit="saveProfile" novalidate>
         <h2>${esc(p.identity.fullName)}</h2>
         <p class="sub">Player ID ${esc(p.identity.playerCode || "")}</p>
         <h3>Food safety</h3>${foodSection(p)}
         <h3 style="margin-top:22px">About</h3>${aboutSection(p)}
         <h3 style="margin-top:22px">Body and routine</h3>${bodySection(p)}
-        <h3 style="margin-top:22px">Review</h3>${reviewSection(p)}
+        <h3 style="margin-top:22px">Contacts</h3>${reviewSection(p)}
         <div class="actions"><button class="btn primary block" type="submit">Save changes</button></div>
         <div id="out"></div>
       </form>
@@ -360,6 +342,7 @@ export async function render(el, ctx) {
   $("#photoInput").addEventListener("change", onPhoto);
   $("#dob").addEventListener("input", () => {
     renderProgramPreview();
+    const lv = $("#level"); if (lv) lv.innerHTML = levelOptions(ageFromDob(val("dob")), lv.value);
     // New profiles: default the bedtime to the age's sleep need, unless it was changed by hand.
     const bed = $("#bed");
     if (isNew && bed && !bed.dataset.touched) {
@@ -425,7 +408,7 @@ function stepErrors(n) {
     const ft = Number(val("heightFt")), inch = Number(val("heightIn"));
     if (!(ft >= 3 && ft <= 7) || !(inch >= 0 && inch <= 11)) return "Enter height as feet (3-7) and inches (0-11).";
   }
-  if (n === 4 && !$("#confirmSafety").checked) return "Please confirm the food-safety information is complete and correct.";
+  if (n === 1 && !$("#confirmSafety").checked) return "Please confirm the food-safety information is complete and correct.";
   return null;
 }
 
@@ -538,6 +521,8 @@ export const actions = {
     if (btn) btn.disabled = false;
     if (!r.ok) return out("err", errText(r));
     await loadProfiles();
+    // If the list didn't come back (server hiccup), still keep the profile we just saved so we don't ask again.
+    if (!state.profiles.some((x) => x.id === r.data.id)) state.profiles.push(r.data);
     setActive(r.data.id);
     toast(editing ? "Saved" : "You're all set");
     syncReminders();

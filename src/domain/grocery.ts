@@ -18,6 +18,7 @@ import { addDays } from "./dates.js";
 import { classifyDay, dailyTargets, type DayType } from "./daily.js";
 import { food, isSafe, safetyContext } from "./foods.js";
 import { bandForAge } from "./ageBands.js";
+import { dayWeatherPlan, type WeatherIndex } from "./weather.js";
 
 export interface GroceryItem {
   name: string;
@@ -72,20 +73,27 @@ const PROTEIN_LINES: Line[] = [
   { id: "lentils", label: "Lentils or beans (dry)", gPer: 110, unit: (n) => `${n} lb` },
 ];
 
-export function buildGroceryList(profile: AthleteProfile, from: string, days = 7): GroceryList {
+export function buildGroceryList(profile: AthleteProfile, from: string, days = 7, wx?: WeatherIndex): GroceryList {
   const age = effectiveAge(profile.identity);
   const band = bandForAge(age);
   const c = safetyContext(profile);
   const ok = (id: string) => { const f = food(id); return !!f && isSafe(f, c); };
 
   const counts: Record<DayType, number> = { match: 0, match_eve: 0, recovery: 0, training: 0, rest: 0 };
+  let hotDays = 0;
+  let coldDays = 0;
   let carbs = 0;
   let protein = 0;
   for (let i = 0; i < days; i++) {
     const date = addDays(from, i);
     const type = classifyDay(profile, date);
     counts[type]++;
-    const t = dailyTargets(profile, date, type);
+    const t = dailyTargets(profile, date, type, wx);
+    if (type === "match" || type === "training") {
+      const wp = dayWeatherPlan(profile, date, wx);
+      if (wp?.conditions.heat && wp.conditions.heat !== "green") hotDays++;
+      else if (wp && (wp.conditions.cold === "cold" || wp.conditions.cold === "very_cold" || wp.conditions.cold === "extreme")) coldDays++;
+    }
     carbs += (t.carbsG[0] + t.carbsG[1]) / 2;
     protein += (t.proteinG[0] + t.proteinG[1]) / 2;
   }
@@ -125,6 +133,25 @@ export function buildGroceryList(profile: AthleteProfile, from: string, days = 7
     gameDay.push({ name: label, amount: `${sessions} servings`, why: "Recovery drink within 30-60 minutes after" });
   }
 
+  const weather: GroceryItem[] = [];
+  if (hotDays) {
+    if (ok("freeze_pops")) weather.push({ name: "Freeze pops", amount: `${hotDays * 2}`, why: `Pre-cooling on ${hotDays} hot day${hotDays > 1 ? "s" : ""}` });
+    if (ok("watermelon")) weather.push({ name: "Watermelon or grapes to freeze", amount: "1", why: "Cold snack at half-time" });
+    if (ok("electrolytes")) weather.push({ name: "Extra electrolyte tablets", amount: `${hotDays * 2} servings`, why: "Heavy sweating" });
+    else if (ok("sports_drink")) weather.push({ name: "Extra sports drinks", amount: `${hotDays * 2}`, why: "Heat: water alone isn't enough" });
+    const salty = ["salted_pretzels", "salted_rice_cakes"].find(ok);
+    if (salty) weather.push({ name: salty === "salted_pretzels" ? "Salted pretzels" : "Lightly salted rice cakes", amount: "1 bag", why: "Replace salt lost in sweat" });
+    weather.push({ name: "Reusable ice packs or a small cooler", amount: "1", why: "Keep drinks cold at the field" });
+  }
+  if (coldDays) {
+    const warmDrink = ["broth", "herbal_tea", "hot_cocoa"].find(ok);
+    if (warmDrink) weather.push({ name: { broth: "Broth (for a thermos)", herbal_tea: "Caffeine-free herbal tea", hot_cocoa: "Hot cocoa mix" }[warmDrink] as string, amount: `${coldDays * 2} servings`, why: `Warm drink for ${coldDays} cold day${coldDays > 1 ? "s" : ""}` });
+    if (ok("warm_oatmeal")) weather.push({ name: "Instant oatmeal packets", amount: `${coldDays + 2}`, why: "Warm, carb-rich breakfast" });
+    if (ok("chicken_soup")) weather.push({ name: "Chicken noodle soup", amount: `${coldDays}`, why: "Warm recovery meal" });
+    else if (ok("warm_sweet_potato")) weather.push({ name: "Extra sweet potatoes", amount: `${coldDays * 2}`, why: "Warm recovery carbs" });
+    weather.push({ name: "Hand warmers", amount: `${coldDays * 2}`, why: "For the bench" });
+  }
+
   const snacks: GroceryItem[] = [];
   if (ok("rice_cakes")) snacks.push({ name: "Rice cakes", amount: "1 pack" });
   if (ok("pretzels")) snacks.push({ name: "Pretzels", amount: "1 bag" });
@@ -160,6 +187,7 @@ export function buildGroceryList(profile: AthleteProfile, from: string, days = 7
       { title: "Carbs (energy)", items: carbItems },
       { title: "Protein (repair)", items: proteinItems },
       { title: "Game and practice day", items: gameDay },
+      { title: hotDays && coldDays ? "For this week's weather" : hotDays ? "For this week's heat" : "For this week's cold", items: weather },
       { title: band.id === "foundations" || band.id === "growth" ? "For growing athletes" : band.id === "veteran" || band.id === "masters" ? "For your age program" : "Extras", items: extras },
       { title: "Snacks", items: snacks },
       { title: "Fruit and vegetables", items: produce },

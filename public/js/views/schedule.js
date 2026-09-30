@@ -3,6 +3,7 @@
 import { $, $$, esc, todayStr, to12, relDay, niceDate, toDateStr, msg, toast, addDays } from "../ui.js";
 import { api, errText } from "../api.js";
 import { active, loadProfiles, render as rerender, syncReminders, isCoach } from "../app.js";
+import { lookupZip } from "./profile.js";
 
 const LABEL = { match: "Game", training: "Practice", recovery: "Recovery", travel: "Travel" };
 
@@ -28,6 +29,9 @@ export async function render(el, ctx) {
         <div><label class="f" for="evDate">Date</label><input class="input" id="evDate" type="date" value="${today}"></div>
         <div><label class="f" for="evTime">${pre === "match" ? "Kickoff" : "Start"}</label><input class="input" id="evTime" type="time" value="${pre === "training" ? p.routine?.usualPracticeTime || "17:00" : "10:00"}"></div>
       </div>
+      <label class="f" for="evZip">Field ZIP <span class="dim">(optional, for away games)</span></label>
+      <input class="input" id="evZip" inputmode="numeric" maxlength="5" placeholder="${esc(p.routine?.homeZip || "e.g. 08540")}">
+      <div class="hint" id="evZipPlace">${p.routine?.homeZip ? `Leave blank to use your home ZIP (${esc(p.routine.homeZip)}).` : "Add a ZIP to get heat and cold plans for this game."}</div>
       <label class="f" for="evCond">Notes <span class="dim">(optional)</span></label>
       <input class="input" id="evCond" placeholder="Home, away, hot, turf…">
       <label class="check"><input type="checkbox" id="evRepeat"><span>Repeat every week</span></label>
@@ -47,7 +51,7 @@ export async function render(el, ctx) {
         <div class="eyebrow">${esc(relDay(d))}${relDay(d) !== niceDate(d) ? " · " + esc(niceDate(d)) : ""}</div>
         <ul class="list">${list.map((e) => `<li>
           <span class="time">${esc(to12(e.startTime.slice(11, 16)))}</span>
-          <div style="flex:1"><span class="kind ${e.type}">${esc(LABEL[e.type] || e.type)}</span>${e.conditions ? ` <span class="rowsub">${esc(e.conditions)}</span>` : ""}
+          <div style="flex:1"><span class="kind ${e.type}">${esc(LABEL[e.type] || e.type)}</span>${e.conditions ? ` <span class="rowsub">${esc(e.conditions)}</span>` : ""}${e.zip ? ` <span class="rowsub">· ZIP ${esc(e.zip)}</span>` : ""}
             ${e.type === "match" ? `<div><button class="btn link sm" data-act="nav" data-to="#/gameday?date=${d}&kickoff=${e.startTime.slice(11, 16)}">Game-day plan ›</button></div>` : ""}</div>
           <button class="btn ghost sm" data-act="delEvent" data-st="${esc(e.startTime)}" data-type="${e.type}" aria-label="Remove">Remove</button>
         </li>`).join("")}</ul>
@@ -61,6 +65,7 @@ export async function render(el, ctx) {
     }
   });
   el.dataset.type = pre;
+  $("#evZip").addEventListener("input", (e) => lookupZip(e.target.value, "#evZipPlace"));
 }
 
 export const actions = {
@@ -75,7 +80,9 @@ export const actions = {
     const date = $("#evDate").value, time = $("#evTime").value || "10:00";
     const conditions = $("#evCond").value.trim() || undefined;
     if (!date) return ($("#out").innerHTML = msg("err", "Pick a date."));
-    const mk = (d) => ({ type, startTime: `${d}T${time}`, importance: type === "match" ? "high" : "normal", ...(conditions ? { conditions } : {}) });
+    const zip = $("#evZip").value.trim();
+    if (zip && !/^\d{5}$/.test(zip)) return ($("#out").innerHTML = msg("err", "Enter a 5-digit ZIP, or leave it blank."));
+    const mk = (d) => ({ type, startTime: `${d}T${time}`, importance: type === "match" ? "high" : "normal", ...(conditions ? { conditions } : {}), ...(zip ? { zip } : {}) });
     let events = [mk(date)];
     if ($("#evRepeat").checked) {
       const until = $("#evUntil").value;

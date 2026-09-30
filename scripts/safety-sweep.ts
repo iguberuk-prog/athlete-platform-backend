@@ -22,6 +22,7 @@ import { FOODS, isSafe, safetyContext } from "../src/domain/foods.js";
 import { bandForAge } from "../src/domain/ageBands.js";
 import { addDays } from "../src/domain/dates.js";
 import { validateProfileInput } from "../src/domain/validation.js";
+import { eventWeatherPlan, type WeatherHour, type WeatherIndex } from "../src/domain/weather.js";
 
 let passed = 0;
 let failed = 0;
@@ -41,7 +42,7 @@ function athlete(dob: string, nutrition: Partial<Nut>, kg = 60): AthleteProfile 
     sport: { primarySport: "soccer", positions: ["midfielder"], competitionLevel: "high_school" },
     anthropometrics: { heightCm: 150, bodyMassKg: kg },
     training: { avgSessionMinutes: 90 },
-    routine: { wakeTime: "07:00", bedTime: "21:30", usualPracticeTime: "17:00" },
+    routine: { wakeTime: "07:00", bedTime: "21:30", usualPracticeTime: "17:00", homeZip: "07039" },
     nutrition: { allergies: [], dietaryRestrictions: [], intolerances: [], dislikes: [], ...nutrition } as Nut,
     schedule: {
       events: [
@@ -59,6 +60,17 @@ function athlete(dob: string, nutrition: Partial<Nut>, kg = 60): AthleteProfile 
   return { ...input, id: "00000000-test", ownerId: "o", createdAt: "", updatedAt: "" } as AthleteProfile;
 }
 
+// Weather for the sweep: a heat wave on the tournament weekend, a cold snap on day 12.
+function wxHours(): WeatherHour[] {
+  const out: WeatherHour[] = [];
+  for (let d = 0; d < 14; d++) for (let h = 0; h < 24; h++) {
+    const hot = d === 5 || d === 6, cold = d === 12 || d === 13;
+    out.push({ time: `${addDays(START, d)}T${String(h).padStart(2, "0")}:00`, tempF: hot ? 95 : cold ? 22 : 66, feelsF: hot ? 105 : cold ? 12 : 66, humidity: 60, wbgtF: hot ? 88.5 : cold ? 18 : 62, windMph: 10, precipPct: cold ? 60 : 5 });
+  }
+  return out;
+}
+const WX: WeatherIndex = { byZip: { "07039": { place: "Roseland, NJ", hours: wxHours() } } };
+
 /** Drop "avoid" lists: they're SUPPOSED to name the allergen ("Always avoiding: peanut"). */
 const noAvoidLists = (_k: string, v: unknown) => (_k === "safety" || _k === "avoid" ? undefined : v);
 
@@ -68,16 +80,26 @@ function allText(p: AthleteProfile, withProgram = true): string {
   for (const d of [5, 6, 12]) {
     const date = addDays(START, d);
     const k = d === 5 ? "08:00" : d === 6 ? "10:00" : "19:00";
-    out.push(buildMatchDayPlan(p, { date, kickoff: k, assumedKickoff: false }));
-    out.push(buildGameDayTimeline(p, { date, kickoff: k, wakeTime: "07:00", bedTime: "21:30", playsTomorrow: d === 5 }));
+    const ev = (p.schedule?.events || []).find((e) => e.startTime === `${date}T${k}`);
+    const weather = ev ? eventWeatherPlan(p, ev, WX) : null;
+    for (const w of [null, weather]) {
+      out.push(buildMatchDayPlan(p, { date, kickoff: k, assumedKickoff: false, weather: w }));
+      out.push(buildGameDayTimeline(p, { date, kickoff: k, wakeTime: "07:00", bedTime: "21:30", playsTomorrow: d === 5, weather: w }));
+    }
   }
+  // A cold-weather game too (day 12 is cold in the sweep forecast).
+  const coldGame = { type: "match" as const, startTime: `${addDays(START, 12)}T19:00`, importance: "high" as const };
+  out.push(buildGameDayTimeline(p, { date: addDays(START, 12), kickoff: "19:00", weather: eventWeatherPlan(p, coldGame, WX) }));
+  out.push(buildMatchDayPlan(p, { date: addDays(START, 12), kickoff: "19:00", assumedKickoff: false, weather: eventWeatherPlan(p, coldGame, WX) }));
   out.push(buildGameDayTimeline(p, { date: addDays(START, 5), kickoff: "13:00", playsTomorrow: true }));
-  out.push(buildRecoveryPlan(p, { today: addDays(START, 7) }));
-  out.push(buildRecoveryPlan(p, { today: addDays(START, 13) }));
-  out.push(buildReminders(p, { from: START, days: 14 }));
-  out.push(buildGroceryList(p, START, 7));
-  out.push(buildGroceryList(p, addDays(START, 7), 7));
-  for (let i = 0; i < 14; i++) out.push(buildToday(p, addDays(START, i), null));
+  for (const weather of [undefined, WX]) {
+    out.push(buildRecoveryPlan(p, { today: addDays(START, 7), weather }));
+    out.push(buildRecoveryPlan(p, { today: addDays(START, 13), weather }));
+    out.push(buildReminders(p, { from: START, days: 14, weather }));
+    out.push(buildGroceryList(p, START, 7, weather));
+    out.push(buildGroceryList(p, addDays(START, 7), 7, weather));
+    for (let i = 0; i < 14; i++) out.push(buildToday(p, addDays(START, i), null, weather));
+  }
   // The program's safety summary and "avoid" lists intentionally name excluded foods; scan the rest.
   if (withProgram) out.push(buildProgram(p));
   return JSON.stringify(out, noAvoidLists);
@@ -98,10 +120,10 @@ function scrub(text: string, p: AthleteProfile): string {
 const WORDS: Record<string, RegExp> = {
   peanut: /peanut/,
   tree_nut: /almond|cashew|walnut|pecan|hazelnut|pistachio/,
-  milk: /yogurt|whey|cheese|\bmilk\b|dairy|cottage/,
+  milk: /yogurt|whey|cheese|\bmilk\b|dairy|cottage|cocoa/,
   egg: /\beggs?\b/,
-  wheat: /pasta|bread|bagel|toast|pretzel|cracker|sandwich|couscous/,
-  gluten: /pasta|bread|bagel|toast|pretzel|cracker|sandwich|couscous/,
+  wheat: /pasta|bread|bagel|toast|pretzel|cracker|sandwich|couscous|noodle/,
+  gluten: /pasta|bread|bagel|toast|pretzel|cracker|sandwich|couscous|noodle/,
   soy: /\bsoy\b|tofu|edamame/,
   fish: /salmon|tuna|\bfish\b|sardine/,
   shellfish: /shrimp|shellfish/,
@@ -115,8 +137,9 @@ const cases: Case[] = [
     nut: { allergies: [{ allergen: a as never, severity: "severe" as const, avoidCrossContact: true }] },
     words: [WORDS[a]],
   })),
-  { name: "diet:vegan", nut: { dietaryRestrictions: ["vegan"] }, words: [/chicken|beef|turkey|salmon|tuna|\bfish\b|shrimp|\beggs?\b|yogurt|\bmilk\b|cheese|whey|honey|chews/] },
+  { name: "diet:vegan", nut: { dietaryRestrictions: ["vegan"] }, words: [/chicken|beef|turkey|salmon|tuna|\bfish\b|shrimp|\beggs?\b|yogurt|\bmilk\b|cheese|whey|honey|chews|cocoa/] },
   { name: "diet:vegetarian", nut: { dietaryRestrictions: ["vegetarian"] }, words: [/chicken|beef|turkey|salmon|tuna|shrimp|chews/] },
+  { name: "free-text: broth", nut: { dislikes: ["broth"] }, words: [/broth/] },
   { name: "diet:pescatarian", nut: { dietaryRestrictions: ["pescatarian"] }, words: [/chicken|beef|turkey|chews/] },
   { name: "diet:halal", nut: { dietaryRestrictions: ["halal"] }, words: [/pork|chews|gelatin/] },
   { name: "diet:kosher", nut: { dietaryRestrictions: ["kosher"] }, words: [/pork|chews|shrimp|shellfish/] },
@@ -162,6 +185,13 @@ for (const [dob, age] of AGES) {
   }
   if (Number(age) < 13) check(`age ${age}: reminders speak to the parent`, buildReminders(p, { from: START, days: 7 }).some((r) => /Test's|for Test/.test(r.title + r.body)));
   check(`age ${age}: program is ${band.name}`, buildProgram(p).band.id === band.id);
+}
+
+// The sweep must really be scanning weather text.
+{
+  const t = allText(athlete("1997-01-15", {}, 70)).toLowerCase();
+  check("sweep covers heat plans", t.includes("pre-cool") && t.includes("heat flag"));
+  check("sweep covers cold plans", t.includes("thermos") && t.includes("very cold"));
 }
 
 // Program boundaries: no gaps, no overlaps.

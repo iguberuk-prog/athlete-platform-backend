@@ -29,6 +29,7 @@ import { PlanService } from "./services/planService.js";
 import { InsightService } from "./services/insightService.js";
 import { TeamService } from "./services/teamService.js";
 import { AccountService } from "./services/accountService.js";
+import { DemoProvider, NwsProvider, type WeatherProvider } from "./weather/nws.js";
 
 interface Services {
   profiles: ProfileService;
@@ -40,11 +41,16 @@ interface Services {
 }
 
 function wire(p: AthleteProfileRepository, c: CheckInRepository, t: TeamRepository): Services {
+  // Live forecasts unless switched off (WEATHER=off), e.g. for offline development.
+  const weather: WeatherProvider | null =
+    process.env.WEATHER === "off" ? null
+      : process.env.WEATHER === "demo" && process.env.DB_BACKEND !== "supabase" ? new DemoProvider()
+        : new NwsProvider();
   return {
     profiles: new ProfileService(p),
     checkins: new CheckInService(c, p),
-    plans: new PlanService(p, c),
-    insights: new InsightService(p, c),
+    plans: new PlanService(p, c, weather),
+    insights: new InsightService(p, c, weather),
     teams: new TeamService(t, p, c),
     account: new AccountService(p, c, t),
   };

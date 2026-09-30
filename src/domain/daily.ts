@@ -20,6 +20,7 @@ import { computeReadiness, type Readiness } from "./readiness.js";
 import { bandForAge, parentVoice, sleepHoursFor, type BandId, type TargetsMode } from "./ageBands.js";
 import { effectiveAge } from "./profile.js";
 import { examples, fillText, safetyContext } from "./foods.js";
+import { dayWeatherPlan, eventWeatherPlan, type WeatherIndex, type WeatherPlan } from "./weather.js";
 import {
   addDays,
   daysBetween,
@@ -69,6 +70,8 @@ export interface TodaySummary {
   checkedIn: boolean;
   tournament: boolean;
   program: { id: BandId; name: string; ages: string; tagline: string; sleepHours: [number, number]; parentVoice: boolean };
+  /** Forecast-driven plan for today (null when no ZIP or no forecast). */
+  weather: { day: WeatherPlan | null; events: { type: string; time: string; plan: WeatherPlan }[]; tomorrow: { time: string; plan: WeatherPlan }[]; homeZip: string | null };
   /** Food-safety items for the Today card. */
   safety: { confirmed: boolean; epinephrine: boolean; medicalDiets: string[] };
   disclaimer: string;
@@ -112,7 +115,7 @@ export function classifyDay(profile: AthleteProfile, date: string): DayType {
   return "rest";
 }
 
-export function dailyTargets(profile: AthleteProfile, date: string, type = classifyDay(profile, date)): DailyTargets {
+export function dailyTargets(profile: AthleteProfile, date: string, type = classifyDay(profile, date), wx?: WeatherIndex): DailyTargets {
   const M = profile.anthropometrics.bodyMassKg;
   const next = nextMatchFrom(profile, addDays(date, 1));
   const gameSoon = next ? daysBetween(date, eventDate(next)) <= 3 : false;
@@ -146,7 +149,15 @@ export function dailyTargets(profile: AthleteProfile, date: string, type = class
   const trainingMin =
     type === "match" ? 110 : type === "training" ? profile.training?.avgSessionMinutes || 90 : 0;
   const band = bandForAge(effectiveAge(profile.identity));
-  const fluidsL = Math.round(((band.fluidMlPerKg / 1000) * M + (trainingMin / 60) * (band.inGame === "water_fruit" ? 0.5 : 0.75)) * 10) / 10;
+  // Weather: heat adds fluid; cold adds a little fuel.
+  const wp = dayWeatherPlan(profile, date, wx);
+  const fluidsL = Math.round(((band.fluidMlPerKg / 1000) * M + (trainingMin / 60) * (band.inGame === "water_fruit" ? 0.5 : 0.75) + (wp?.extraFluidL || 0)) * 10) / 10;
+  if (wp?.extraCarbsPerKg) perKg = [perKg[0] + wp.extraCarbsPerKg, perKg[1] + wp.extraCarbsPerKg];
+  if (wp && wp.severity !== "none") {
+    note += wp.conditions.heat && wp.conditions.heat !== "green"
+      ? ` Heat today: fluid target raised by ${wp.extraFluidL} L.`
+      : wp.extraCarbsPerKg ? " Cold today: carb target raised a little to keep you warm and fueled." : "";
+  }
   const P = band.proteinPerKg;
   const plate = type === "rest"
     ? "A third carbs, a third protein, a third vegetables and fruit."
@@ -177,11 +188,17 @@ export function buildToday(
   profile: AthleteProfile,
   date: string,
   checkin: DailyCheckIn | null,
+  wx?: WeatherIndex,
 ): TodaySummary {
   const age = effectiveAge(profile.identity);
   const band = bandForAge(age);
   const type = classifyDay(profile, date);
-  const targets = dailyTargets(profile, date, type);
+  const targets = dailyTargets(profile, date, type, wx);
+  const dayPlan = dayWeatherPlan(profile, date, wx);
+  const eventPlans = eventsOn(profile, date)
+    .filter((e) => e.type === "match" || e.type === "training")
+    .map((e) => ({ type: e.type as string, time: e.startTime.slice(11, 16), plan: eventWeatherPlan(profile, e, wx) as WeatherPlan }))
+    .filter((x) => !!x.plan);
   const todays = eventsOn(profile, date).map((e) => ref(e, date));
   const nm = nextMatchFrom(profile, date);
   const { wake, bed } = routineOf(profile);
@@ -208,6 +225,7 @@ export function buildToday(
     focus.push("Balanced meals, a full water bottle, and your normal routine.");
   }
   if (tournament) focus.unshift("Tournament stretch: every meal and every hour of sleep counts.");
+  if (dayPlan && dayPlan.severity !== "none" && dayPlan.actions[0]) focus.unshift(dayPlan.actions[0]);
   focus.push(fillText(band.focus[date.charCodeAt(9) % band.focus.length], safetyContext(profile)));
   focus.push(`Wake ${to12(wake)}. Lights out ${to12(bed)}.`);
   // Is the routine long enough for this age's sleep need?
@@ -232,6 +250,15 @@ export function buildToday(
     readiness,
     checkedIn: !!checkin,
     tournament,
+    weather: {
+      day: dayPlan,
+      events: eventPlans,
+      // Tomorrow's games, so there's time to freeze bottles or pack layers.
+      tomorrow: eventsOn(profile, addDays(date, 1), "match")
+        .map((e) => ({ time: e.startTime.slice(11, 16), plan: eventWeatherPlan(profile, e, wx) as WeatherPlan }))
+        .filter((x) => !!x.plan && x.plan.severity !== "none"),
+      homeZip: profile.routine?.homeZip || null,
+    },
     program: {
       id: band.id, name: band.name, ages: band.ages, tagline: band.tagline,
       sleepHours: sleepHoursFor(age), parentVoice: parentVoice(age),

@@ -2,6 +2,7 @@
 
 import { esc, todayStr, nowStr, to12, relDay, untilText, icon } from "../ui.js";
 import { api, errText } from "../api.js";
+import { weatherCard } from "../weather.js";
 
 export function readinessRing(score, status) {
   const r = 36, c = 2 * Math.PI * r, pct = Math.max(0, Math.min(100, score)) / 100;
@@ -82,6 +83,11 @@ export async function render(el, ctx) {
       ${countdown}
     </section>
 
+    ${t.weather.events.length
+      ? t.weather.events.map((e) => weatherCard(e.plan, `${e.type === "match" ? "Game" : "Practice"} at ${to12(e.time)}`)).join("")
+      : t.weather.day && t.weather.day.severity !== "none" ? weatherCard(t.weather.day, "Weather today") : ""}
+    ${t.weather.tomorrow.map((e) => weatherCard(e.plan, `Tomorrow's game at ${to12(e.time)}`)).join("")}
+    ${t.weather.homeZip ? "" : `<button class="tile" data-act="nav" data-to="#/profile/edit"><span class="ic">°F</span><span><div class="tt">Add your ZIP code</div><div class="ts">Plans adjust for heat and cold at every game.</div></span><span class="chev">›</span></button>`}
     <div class="card">${ready}</div>
 
     <div class="card">

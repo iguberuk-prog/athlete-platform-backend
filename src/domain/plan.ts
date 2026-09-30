@@ -17,6 +17,7 @@ import { to12 } from "./dates.js";
 import { bandForAge } from "./ageBands.js";
 import { effectiveAge } from "./profile.js";
 import { examples, names, pick, safeFor, safetyContext, unsafeReason, type FoodTags, type SafetyContext } from "./foods.js";
+import type { WeatherPlan } from "./weather.js";
 
 export interface PlanTarget {
   label: string;
@@ -60,6 +61,7 @@ export interface PlanOptions {
   assumedKickoff: boolean;
   conditions?: string;
   checkin?: DailyCheckIn | null;
+  weather?: WeatherPlan | null;
 }
 
 // --- food safety (delegates to the central catalog in foods.ts) -----------
@@ -165,7 +167,21 @@ export function buildMatchDayPlan(profile: AthleteProfile, opts: PlanOptions): M
     },
   ];
 
-  const warnings: string[] = [];
+  const wp = opts.weather;
+  if (wp && wp.severity !== "none") {
+    blocks.splice(2, 0, {
+      phase: "Weather",
+      timing: wp.conditions.headline,
+      targets: [
+        { label: "Before", detail: wp.conditions.heat && wp.conditions.heat !== "green" ? `Drink about ${wp.preHydrateMl} ml 4 hours before kickoff` : "Warm layers on until kickoff; longer warm-up" },
+        { label: "During", detail: `${wp.inGameLph[0]}–${wp.inGameLph[1]} L of fluid per hour` },
+        ...wp.actions.slice(1, 3).map((a) => ({ label: "Also", detail: a })),
+      ],
+      foods: wp.foodRole ? names(pick(c, wp.foodRole === "warm" ? ["broth", "herbal_tea", "hot_cocoa", "warm_oatmeal"] : ["slushie", "freeze_pops", "cold_grapes", "watermelon"], 3, wp.foodRole)) : undefined,
+      notes: wp.packing,
+    });
+  }
+  const warnings: string[] = [...(wp?.warnings || [])];
   const ci = opts.checkin;
   if (ci) {
     if ((ci.sorenessLevel ?? 0) >= 7) warnings.push("High soreness reported today — emphasise warm-up, mobility, and post-match recovery.");

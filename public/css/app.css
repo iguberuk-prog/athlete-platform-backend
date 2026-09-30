@@ -320,3 +320,17 @@ table.data th { color: var(--dim); font-weight: 800; }
 .progchip { display: inline-flex; margin-bottom: 8px; padding: 5px 10px; border-radius: var(--r3); border: 1px solid rgba(191,246,63,.4); background: rgba(11,14,18,.5); color: var(--lime); font-size: 12px; font-weight: 800; cursor: pointer; min-height: 30px; align-items: center; }
 .plate { background: var(--bg2); border: 1px solid var(--line); border-radius: var(--r2); padding: 12px; }
 .tile .ic { font-weight: 900; color: var(--warn); }
+
+/* ---------- weather ---------- */
+.flag { display: inline-flex; align-items: center; padding: 4px 10px; border-radius: var(--r3); font-size: 12px; font-weight: 900; white-space: nowrap; }
+.flag.green { background: rgba(79,209,139,.15); color: #8ff0bb; }
+.flag.yellow { background: #ffd84d; color: #1b1500; }
+.flag.orange { background: #ff9a3d; color: #1b0d00; }
+.flag.red { background: #ff5a5a; color: #fff; }
+.flag.black { background: #000; color: #fff; border: 1px solid #555; }
+.flag.coldf { background: rgba(92,200,255,.18); color: #bfe8ff; }
+.card.wx-hot { border-color: rgba(255,154,61,.5); background: linear-gradient(180deg, rgba(255,154,61,.08), var(--panel) 60%); }
+.card.wx-cold { border-color: rgba(92,200,255,.45); background: linear-gradient(180deg, rgba(92,200,255,.08), var(--panel) 60%); }
+
+.row2 > *, .row3 > * { min-width: 0; }
+input[type=time].input { padding-left: 10px; padding-right: 6px; }

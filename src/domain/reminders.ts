@@ -21,6 +21,7 @@ import type { AthleteProfile } from "./profile.js";
 import { bandForAge, parentVoice, sleepHoursFor } from "./ageBands.js";
 import { effectiveAge } from "./profile.js";
 import { examples, safetyContext } from "./foods.js";
+import { cups, eventWeatherPlan, type WeatherIndex } from "./weather.js";
 import { addDays, eventTime, eventsOn, gameMorning, routineOf, shiftLocal, snap15, to12, toMin, fromMin } from "./dates.js";
 
 export type ReminderKind = "checkin" | "fuel" | "hydrate" | "recover" | "sleep";
@@ -45,7 +46,7 @@ const r5 = (n: number) => Math.round(n / 5) * 5;
 
 export function buildReminders(
   profile: AthleteProfile,
-  opts: { from: string; days?: number; now?: string; prefs?: ReminderPrefs },
+  opts: { from: string; days?: number; now?: string; prefs?: ReminderPrefs; weather?: WeatherIndex },
 ): Reminder[] {
   const days = Math.max(1, Math.min(14, opts.days ?? 7));
   const prefs = { checkin: true, fuel: true, hydrate: true, recover: true, sleep: true, ...(opts.prefs || {}) };
@@ -112,6 +113,27 @@ export function buildReminders(
           : `The first 30 minutes matter. About ${r5(1.2 * M)} g carbs plus protein, like ${examples(c, RECOVER, 2, "recovery")}. Rehydrate.`);
       addAt(shiftLocal(date, k, 230), "recover", "Recovery dinner",
         "Full plate: carbs, protein and vegetables. Keep sipping fluids.");
+    }
+
+    // Weather: heat and cold plans for each game and practice.
+    for (const e of [...matches, ...practices]) {
+      const wp = eventWeatherPlan(profile, e, opts.weather);
+      if (!wp || wp.severity === "none") continue;
+      const t = eventTime(e, practice);
+      const what = e.type === "match" ? "game" : "practice";
+      const hot = !!wp.conditions.heat && wp.conditions.heat !== "green";
+      if (hot) {
+        addAt(shiftLocal(date, t, -240), "hydrate", `Heat plan: ${wp.conditions.headline}`,
+          `${kid ? `${first}'s` : "Your"} ${what} at ${to12(t)} will be hot. Drink about ${wp.preHydrateMl} ml (${cups(wp.preHydrateMl)}) now.${wp.warnings[0] && /policy|coach/.test(wp.warnings[0]) ? " " + wp.warnings[0] : ""}`);
+        addAt(shiftLocal(date, t, -40), "hydrate", "Pre-cool",
+          `Something ice-cold now: ${examples(cg, ["slushie", "freeze_pops", "cold_grapes", "watermelon"], 2, "cooling")}. Shade until warm-up.`);
+      } else {
+        addAt(shiftLocal(date, t, -120), "fuel", `Cold ${what}: ${wp.conditions.headline}`,
+          `Pack: ${wp.packing.slice(0, 3).map((x) => x.charAt(0).toLowerCase() + x.slice(1)).join(", ")}. Fill the thermos with ${examples(c, ["broth", "herbal_tea", "hot_cocoa"], 1, "warm", "a warm drink")}.`);
+      }
+      if (e === matches[0] || (!matches.length && e === practices[0])) {
+        if (hot) add(addDays(date, -1), "20:30", "hydrate", "Hot game tomorrow", `Freeze a water bottle tonight and drink an extra bottle before bed.${kid ? ` Pack ${first}'s cooler.` : ""}`);
+      }
     }
 
     if (!matches.length) {

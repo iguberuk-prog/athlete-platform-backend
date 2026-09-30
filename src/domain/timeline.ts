@@ -21,6 +21,7 @@ import { gameMorning, to12 } from "./dates.js";
 import { bandForAge, parentVoice, sleepHoursFor } from "./ageBands.js";
 import { effectiveAge } from "./profile.js";
 import { examples, names, pick, safetyContext } from "./foods.js";
+import { cups as cupText, type WeatherPlan } from "./weather.js";
 
 export interface TimelineEntry {
   time: string; // HH:MM
@@ -66,6 +67,8 @@ export interface GameDayTimeline {
   nextDay: { playsTomorrow: boolean; note: string };
   calendar: CalendarEvent[];
   safety: { avoidAllergens: string[]; diets: string[]; intolerances: string[]; warnings: string[] };
+  /** Forecast-driven changes for this game (null without a ZIP or forecast). */
+  weather: WeatherPlan | null;
   disclaimer: string;
 }
 
@@ -77,6 +80,7 @@ export interface TimelineOptions {
   conditions?: string;
   playsTomorrow?: boolean;
   checkin?: DailyCheckIn | null;
+  weather?: WeatherPlan | null;
 }
 
 // --- clock helpers ---------------------------------------------------------
@@ -214,6 +218,54 @@ export function buildGameDayTimeline(
     },
   ];
 
+  // Weather: layer the forecast onto the day.
+  const wp = opts.weather || null;
+  if (wp && wp.severity !== "none") {
+    const hot = !!wp.conditions.heat && wp.conditions.heat !== "green";
+
+    if (hot) {
+      entries.push({
+        time: fromMin(Math.max(toMin(wake), snap15(kickMin - 240))),
+        phase: "Pre-hydrate",
+        title: `Heat plan: drink ${wp.preHydrateMl} ml now`,
+        detail: `About ${cupText(wp.preHydrateMl)} over the next 30 minutes${young ? "" : ", with some salt or a sports drink"}. Pale-yellow urine by warm-up is the goal.`,
+      });
+      entries.push({
+        time: fromMin(snap15(kickMin - 30)),
+        phase: "Pre-cool",
+        title: "Cool down before warming up",
+        detail: `Something ice-cold: ${examples(c, ["slushie", "freeze_pops", "cold_grapes", "watermelon"], 2, "cooling")}. Stay in the shade until warm-up.`,
+        foods: names(pick(c, ["slushie", "freeze_pops", "cold_grapes", "watermelon"], 3, "cooling")),
+      });
+    } else if (wp.foodRole === "warm") {
+      entries.push({
+        time: fromMin(snap15(kickMin - 45)),
+        phase: "Warm-up",
+        title: `Longer warm-up (${band.warmupMin + (wp.severity === "high" ? 10 : 5)} min)`,
+        detail: "Keep your warm layers on until kickoff. Cold muscles strain more easily.",
+      });
+    }
+    for (const e of entries) {
+      if (e.phase === "Kickoff") {
+        e.detail = hot
+          ? `${young ? "Drink at every break" : "30–60 g carbohydrate per hour"}; aim for ${wp.inGameLph[0]}–${wp.inGameLph[1]} L of fluid per hour${young ? "" : " with electrolytes"}. Take every water break.`
+          : `${e.detail} Keep drinking even though you won't feel thirsty in the cold.`;
+      }
+      if (e.phase === "Half-time") {
+        e.detail = hot
+          ? `Shade, cold towels, and fluids with electrolytes. ${examples(c, ["cold_grapes", "orange", "watermelon", "sports_drink"], 2, "halftime")}.`
+          : `Layer up. A warm drink from the thermos (${examples(c, ["broth", "herbal_tea", "hot_cocoa"], 2, "warm")}) and ${examples(c, ["banana", "orange", "sports_drink"], 1, "halftime")}.`;
+        e.foods = hot ? names(pick(c, ["cold_grapes", "orange", "watermelon", "sports_drink"], 3, "halftime")) : names(pick(c, ["broth", "herbal_tea", "hot_cocoa"], 3, "warm"));
+      }
+      if (e.phase === "Immediate recovery") {
+        e.detail = hot
+          ? `${e.detail} Heat day: cool down in the shade first, and drink about 1.5 times what you sweated out.`
+          : `Dry, warm clothes within 10 minutes. ${e.detail} Something warm: ${examples(c, ["hot_cocoa", "chicken_soup", "broth", "warm_rice_bowl"], 2, "warm")}.`;
+      }
+    }
+    entries.sort((a, b) => a.time.localeCompare(b.time));
+  }
+
   // Night routine.
   const nightItems: string[] = [
     "Wind down: dim screens, keep the room cool and dark.",
@@ -310,11 +362,12 @@ export function buildGameDayTimeline(
     },
     calendar,
     safety: {
-      avoidAllergens: (n.allergies || []).map((a) => a.allergen),
+      avoidAllergens: (n.allergies || []).map((a) => (a.allergen === "other" ? a.note || "other" : a.allergen)),
       diets: n.dietaryRestrictions || [],
       intolerances: n.intolerances || [],
       warnings,
     },
+    weather: wp,
     disclaimer: "Starting targets from published sports-nutrition guidance; not a substitute for individualized professional advice.",
   };
 }

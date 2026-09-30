@@ -2,6 +2,7 @@
 
 import { esc, todayStr, to12, relDay, niceDate, untilText, minutesOf, storeGet, storeSet, toDateStr } from "../ui.js";
 import { api, errText } from "../api.js";
+import { weatherCard } from "../weather.js";
 
 let current = null;
 
@@ -70,6 +71,7 @@ function renderTimeline(t, isToday) {
       <div class="note">${t.playsTomorrow ? "You play again tomorrow. Tonight's recovery matters." : `Plan scaled to ${Math.round(t.bodyMassKg / 0.453592)} lb.`}</div>
       <div class="countdown">${new Date(kickDT) > new Date() ? `Kickoff in <b>${esc(untilText(kickDT))}</b>` : "Game started or finished"}</div>
     </section>
+    ${t.weather ? weatherCard(t.weather, "Game-time weather", { all: true }) : ""}
     ${warns}
     ${avoid.length ? `<div class="card tight"><span class="small muted">Always avoiding: </span><b class="small">${esc(avoid.join(", "))}</b></div>` : ""}
     ${dayBefore}

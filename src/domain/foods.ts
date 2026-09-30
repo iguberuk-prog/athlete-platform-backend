@@ -22,7 +22,8 @@ import { effectiveAge } from "./profile.js";
 
 export type FoodRole =
   | "meal_carb" | "quick_carb" | "in_game" | "halftime" | "breakfast" | "snack"
-  | "protein" | "slow_protein" | "recovery" | "fruit" | "veg" | "calcium" | "fluid";
+  | "protein" | "slow_protein" | "recovery" | "fruit" | "veg" | "calcium" | "fluid"
+  | "cooling" | "warm" | "salty";
 
 export interface FoodTags {
   allergens?: string[];
@@ -117,6 +118,22 @@ export const FOODS: Food[] = [
   F("turkey_sandwich", "a turkey sandwich", ["recovery"], { ...WHEAT, animal: true, meat: true, keywords: ["sandwich", "turkey", "bread"] }),
   F("rice_bowl", "a chicken and rice bowl", ["recovery"], { animal: true, meat: true, keywords: ["rice", "chicken"] }),
   F("tofu_bowl", "a tofu and rice bowl", ["recovery"], { allergens: ["soy"], keywords: ["rice", "tofu", "soy"] }),
+  // hot days
+  F("freeze_pops", "freeze pops", ["cooling"], { keywords: ["freeze pop", "ice pop", "popsicle"] }),
+  F("slushie", "an ice slushie", ["cooling"], { keywords: ["slush"] }),
+  F("watermelon", "watermelon", ["cooling", "fruit", "halftime"], { highFodmap: true, keywords: ["watermelon", "melon"] }),
+  F("cold_grapes", "frozen grapes", ["cooling", "halftime"], { keywords: ["grape"] }),
+  F("salted_rice_cakes", "lightly salted rice cakes", ["salty", "snack"], { keywords: ["rice cake"] }),
+  F("salted_pretzels", "salted pretzels", ["salty", "snack"], { ...WHEAT, keywords: ["pretzel"] }),
+  F("salted_potatoes", "salted boiled potatoes", ["salty", "meal_carb"], { keywords: ["potato"] }),
+  // cold days
+  F("broth", "warm broth", ["warm"], { keywords: ["broth", "soup"] }),
+  F("chicken_soup", "chicken noodle soup", ["warm", "recovery"], { ...WHEAT, animal: true, meat: true, keywords: ["soup", "chicken", "noodle"] }),
+  F("hot_cocoa", "hot cocoa", ["warm", "recovery"], { ...MILK, keywords: ["cocoa", "chocolate", "milk", "dairy"] }),
+  F("warm_oatmeal", "warm oatmeal", ["warm", "breakfast"], { mayContain: ["gluten", "wheat"], keywords: ["oat"] }),
+  F("herbal_tea", "caffeine-free herbal tea", ["warm", "fluid"], { keywords: ["tea"] }),
+  F("warm_rice_bowl", "a warm rice and chicken bowl", ["warm", "recovery"], { animal: true, meat: true, keywords: ["rice", "chicken"] }),
+  F("warm_sweet_potato", "a baked sweet potato", ["warm", "meal_carb"], { keywords: ["sweet potato"] }),
   // vegetables
   F("greens", "leafy greens", ["veg", "calcium"], { keywords: ["spinach", "greens", "kale"] }),
   F("carrots", "carrots", ["veg", "snack"], { keywords: ["carrot"] }),

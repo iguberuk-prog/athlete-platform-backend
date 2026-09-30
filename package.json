@@ -6,7 +6,7 @@
   "description": "Athlete Performance Platform: backend, web app and PWA.",
   "scripts": {
     "demo": "tsx scripts/demo.ts",
-    "test": "tsx scripts/test.ts && tsx scripts/safety-sweep.ts",
+    "test": "tsx scripts/test.ts && tsx scripts/safety-sweep.ts && tsx scripts/weather-test.ts",
     "typecheck": "tsc --noEmit",
     "dev": "netlify dev",
     "devserver": "tsx scripts/devserver.ts"

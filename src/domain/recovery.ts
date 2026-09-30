@@ -19,6 +19,7 @@ import type { DailyCheckIn } from "./checkin.js";
 import { bandForAge, sleepHoursFor } from "./ageBands.js";
 import { effectiveAge } from "./profile.js";
 import { examples, names, pick, safetyContext } from "./foods.js";
+import { eventWeatherPlan, type WeatherIndex } from "./weather.js";
 import { computeReadiness, type Readiness } from "./readiness.js";
 import { addDays, daysBetween, eventDate, eventTime, shiftLocal, shortDate, sortedEvents, to12, toMin } from "./dates.js";
 
@@ -64,7 +65,7 @@ function matchStartMin(e: ScheduledEvent): number {
 
 export function buildRecoveryPlan(
   profile: AthleteProfile,
-  opts: { today: string; anchorDate?: string; checkins?: DailyCheckIn[] },
+  opts: { today: string; anchorDate?: string; checkins?: DailyCheckIn[]; weather?: WeatherIndex },
 ): RecoveryPlan {
   const M = profile.anthropometrics.bodyMassKg;
   const matches = sortedEvents(profile).filter((e) => e.type === "match");
@@ -120,11 +121,18 @@ export function buildRecoveryPlan(
     const gapHours = Math.round(((matchStartMin(b) - endA) / 60) * 10) / 10;
     const endStr = shiftLocal(eventDate(a), eventTime(a), 110);
     const to = `${eventDate(b)}T${eventTime(b)}`;
+    const wA = eventWeatherPlan(profile, a, opts.weather);
+    const hotA = !!wA?.conditions.heat && wA.conditions.heat !== "green";
+    const coldA = wA?.foodRole === "warm";
+    const wxStep = hotA
+      ? `It was hot (${wA!.conditions.headline}): shade and cold towels first, then about 1.5 times the fluid you lost, with electrolytes.`
+      : coldA ? `It was cold (${wA!.conditions.headline}): dry clothes and something warm first, like ${examples(c, ["broth", "hot_cocoa", "herbal_tea"], 2, "warm", "a warm drink")}.` : null;
     if (gapHours < 8) {
       windows.push({
         from: endStr, to, gapHours, kind: "fast",
         title: `Fast turnaround: ${gapHours} h until the next game`,
         steps: [
+          ...(wxStep ? [wxStep] : []),
           `Start within 15 minutes: about ${r5(1.1 * M)} g carbs per hour for the next 4 hours, in small, frequent doses.`,
           `Easy-to-digest carbs only: ${examples(cg, EASY, 4, "quick_carb")}. Keep fat and fibre low.`,
           `Add ${r5(band.perMealProteinPerKg * M)} g protein in the first hour.`,
@@ -137,6 +145,7 @@ export function buildRecoveryPlan(
         from: endStr, to, gapHours, kind: "same_or_next_day",
         title: `Next game in ${Math.round(gapHours)} h`,
         steps: [
+          ...(wxStep ? [wxStep] : []),
           `Recovery snack within 30 minutes: about ${r5(1.2 * M)} g carbs + ${perMealP} protein.`,
           `Full meal within 2 hours. Aim for ${r5(6 * M)}-${r5(10 * M)} g carbs across the next 24 hours.`,
           "Replace about 150% of the fluid you lost, with salt or electrolytes.",
@@ -177,6 +186,14 @@ export function buildRecoveryPlan(
       label = matchesToday.length > 1 ? `${matchesToday.length} games` : `Game ${cluster.indexOf(matchesToday[0]) + 1}`;
       title = `Game day: ${matchesToday.map((e) => to12(eventTime(e))).join(" and ")}`;
       carbsTxt = young ? "Bigger carb servings at meals, water during play" : `${r5(6 * M)}-${r5(8 * M)} g plus 30-60 g per hour during play`;
+      for (const m of matchesToday) {
+        const w = eventWeatherPlan(profile, m, opts.weather);
+        if (!w || w.severity === "none") continue;
+        const hot = !!w.conditions.heat && w.conditions.heat !== "green";
+        actions.push(hot
+          ? `${to12(eventTime(m))} game: ${w.conditions.headline}. Rehydrate with electrolytes: about 1.5 times the weight lost in sweat.`
+          : `${to12(eventTime(m))} game: ${w.conditions.headline}. Dry, warm clothes within 10 minutes, then a warm meal.`);
+      }
       actions.push("Recovery snack within 30 minutes of the final whistle.");
       actions.push("Recovery dinner within 2 hours: carbs + protein + vegetables.");
       actions.push(`A protein snack before bed, such as ${examples(c, SLOW, 2, "slow_protein", "a protein snack you tolerate")}.`);

@@ -7,14 +7,14 @@
  * - Writes (POST/PUT/DELETE) are never cached.
  * - Logging out clears cached API answers.
  */
-const VERSION = "v3";
+const VERSION = "v4";
 const SHELL = `shell-${VERSION}`;
 const API = `api-${VERSION}`;
 const PRECACHE = [
   "/", "/index.html", "/css/app.css", "/js/app.js", "/js/ui.js", "/js/api.js", "/js/native.js",
   "/js/views/auth.js", "/js/views/profile.js", "/js/views/today.js", "/js/views/gameday.js", "/js/views/recovery.js",
   "/js/views/checkin.js", "/js/views/more.js", "/js/views/schedule.js", "/js/views/trends.js", "/js/views/grocery.js",
-  "/js/views/team.js", "/js/views/settings.js", "/js/views/program.js", "/js/programs.js", "/manifest.webmanifest", "/icons/icon-192.png", "/icons/icon-512.png",
+  "/js/views/team.js", "/js/views/settings.js", "/js/views/program.js", "/js/programs.js", "/js/weather.js", "/manifest.webmanifest", "/icons/icon-192.png", "/icons/icon-512.png",
   "/privacy.html", "/terms.html",
 ];
 

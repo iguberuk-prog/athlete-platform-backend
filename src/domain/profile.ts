@@ -205,6 +205,8 @@ export interface AdvancedMetrics {
 
 export interface ScheduledEvent {
   type: EventType;
+  /** 5-digit US ZIP of the field, for the weather forecast. Defaults to the home ZIP. */
+  zip?: string;
   /** ISO-8601 datetime with offset, e.g. 2026-06-02T19:00:00+01:00. */
   startTime: string;
   conditions?: string;
@@ -227,6 +229,8 @@ export interface Routine {
   bedTime?: string;
   /** HH:MM usual practice start, used when a practice has no time. */
   usualPracticeTime?: string;
+  /** 5-digit US ZIP where the athlete usually trains, for the weather forecast. */
+  homeZip?: string;
 }
 
 // --- the full profile ------------------------------------------------------

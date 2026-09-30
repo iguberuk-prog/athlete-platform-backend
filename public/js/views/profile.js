@@ -162,6 +162,9 @@ function bodySection(p) {
         <div><label class="f" for="practice">Practice</label><input class="input" id="practice" type="time" value="${rt.usualPracticeTime || "17:00"}"></div>
       </div>
       <div class="hint">Reminders and sleep targets are timed from these.</div>
+      <label class="f" for="homeZip">Home ZIP code <span class="dim">(where ${who()} usually train${isParent() ? "s" : ""})</span></label>
+      <input class="input" id="homeZip" inputmode="numeric" maxlength="5" autocomplete="postal-code" placeholder="e.g. 07039" value="${esc(rt.homeZip || "")}">
+      <div class="hint" id="zipPlace">We check the forecast so plans adjust for heat and cold.</div>
       <div class="row2">
         <div><label class="f" for="days">Practices per week</label><input class="input" id="days" inputmode="numeric" value="${tr.trainingDaysPerWeek ?? 3}"></div>
         <div><label class="f" for="mins">Practice length (min)</label><input class="input" id="mins" inputmode="numeric" value="${tr.avgSessionMinutes ?? 75}"></div>
@@ -350,8 +353,23 @@ export async function render(el, ctx) {
     }
   });
   $("#bed").addEventListener("input", (e) => (e.target.dataset.touched = "1"));
+  $("#homeZip").addEventListener("input", (e) => lookupZip(e.target.value, "#zipPlace"));
+  if (val("homeZip")) lookupZip(val("homeZip"), "#zipPlace");
   $("#otherAllergy").addEventListener("input", () => { renderAllergyDetails(); if (!isNew) renderReview(); });
   el.addEventListener("change", () => { if (!isNew || step === 4) renderReview(); });
+}
+
+/** Shows "Roseland, NJ · 72°F now" under a ZIP field. */
+export async function lookupZip(zip, target) {
+  const el = $(target);
+  if (!el) return;
+  zip = String(zip || "").trim();
+  if (!/^\d{5}$/.test(zip)) { el.textContent = zip ? "Keep typing: 5 digits." : "We check the forecast so plans adjust for heat and cold."; return; }
+  el.textContent = "Checking…";
+  const r = await api(`/api/weather/${zip}`);
+  if (!r.ok) { el.textContent = r.data?.message || "We couldn't find that ZIP code."; return; }
+  const now = r.data.next12?.[0];
+  el.textContent = `${r.data.place || "ZIP found"}${now?.tempF != null ? ` · ${now.tempF}°F now` : ""}`;
 }
 
 function onPhoto(e) {
@@ -386,6 +404,7 @@ function stepErrors(n) {
     if (age < 13 && state.user?.role === "athlete") return "Players under 13 need a parent account. Ask a parent to sign up as a parent and add you.";
   }
   if (n === 3) {
+    if (val("homeZip") && !/^\d{5}$/.test(val("homeZip"))) return "Enter a 5-digit ZIP code, or leave it blank.";
     const lb = Number(val("weight"));
     if (!lb || lb < 40 || lb > 350) return "Enter weight in pounds (40-350).";
     const ft = Number(val("heightFt")), inch = Number(val("heightIn"));
@@ -430,7 +449,7 @@ function payload(existing) {
       bodyMassKg: lbToKg(Number(val("weight"))),
     },
     training: { ...(base.training || {}), trainingDaysPerWeek: Number(val("days")) || undefined, avgSessionMinutes: Number(val("mins")) || undefined },
-    routine: { wakeTime: val("wake") || "07:00", bedTime: val("bed") || "22:00", usualPracticeTime: val("practice") || "17:00" },
+    routine: { wakeTime: val("wake") || "07:00", bedTime: val("bed") || "22:00", usualPracticeTime: val("practice") || "17:00", homeZip: val("homeZip") || undefined },
     contact,
     nutrition: {
       ...(base.nutrition || {}),

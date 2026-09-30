@@ -13,6 +13,8 @@ import { buildTrends, type TrendSummary } from "../domain/trends.js";
 import { buildGroceryList, type GroceryList } from "../domain/grocery.js";
 import { buildReminders, type Reminder, type ReminderPrefs } from "../domain/reminders.js";
 import { buildProgram, type Program } from "../domain/program.js";
+import type { WeatherProvider } from "../weather/nws.js";
+import { loadWeather } from "./weatherService.js";
 
 export type Found<T> = { ok: true; value: T } | { ok: false; code: "not_found" };
 
@@ -24,6 +26,7 @@ export class InsightService {
   constructor(
     private readonly profiles: AthleteProfileRepository,
     private readonly checkins: CheckInRepository,
+    private readonly weather: WeatherProvider | null = null,
   ) {}
 
   private async load(ownerId: string, id: string): Promise<AthleteProfile | null> {
@@ -33,17 +36,17 @@ export class InsightService {
   async today(ownerId: string, id: string, date: string, now?: string): Promise<Found<TodayResponse>> {
     const p = await this.load(ownerId, id);
     if (!p) return { ok: false, code: "not_found" };
-    const ci = await this.checkins.getByDate(ownerId, id, date);
-    const summary = buildToday(p, date, ci);
-    const reminders = buildReminders(p, { from: date, days: 1, now });
+    const [ci, wx] = await Promise.all([this.checkins.getByDate(ownerId, id, date), loadWeather(this.weather, p, date, 2)]);
+    const summary = buildToday(p, date, ci, wx);
+    const reminders = buildReminders(p, { from: date, days: 1, now, weather: wx });
     return { ok: true, value: { ...summary, reminders } };
   }
 
   async recovery(ownerId: string, id: string, today: string, anchorDate?: string): Promise<Found<RecoveryPlan>> {
     const p = await this.load(ownerId, id);
     if (!p) return { ok: false, code: "not_found" };
-    const checkins = await this.checkins.listByProfile(ownerId, id, 21);
-    return { ok: true, value: buildRecoveryPlan(p, { today, anchorDate, checkins }) };
+    const [checkins, wx] = await Promise.all([this.checkins.listByProfile(ownerId, id, 21), loadWeather(this.weather, p, today, 3)]);
+    return { ok: true, value: buildRecoveryPlan(p, { today, anchorDate, checkins, weather: wx }) };
   }
 
   async trends(ownerId: string, id: string, today: string, days = 28): Promise<Found<TrendSummary>> {
@@ -56,7 +59,8 @@ export class InsightService {
   async grocery(ownerId: string, id: string, from: string, days = 7): Promise<Found<GroceryList>> {
     const p = await this.load(ownerId, id);
     if (!p) return { ok: false, code: "not_found" };
-    return { ok: true, value: buildGroceryList(p, from, days) };
+    const wx = await loadWeather(this.weather, p, from, days);
+    return { ok: true, value: buildGroceryList(p, from, days, wx) };
   }
 
   async reminders(
@@ -66,7 +70,8 @@ export class InsightService {
   ): Promise<Found<Reminder[]>> {
     const p = await this.load(ownerId, id);
     if (!p) return { ok: false, code: "not_found" };
-    return { ok: true, value: buildReminders(p, opts) };
+    const wx = await loadWeather(this.weather, p, opts.from, opts.days ?? 7);
+    return { ok: true, value: buildReminders(p, { ...opts, weather: wx }) };
   }
 
   async program(ownerId: string, id: string): Promise<Found<Program>> {

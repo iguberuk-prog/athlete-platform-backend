@@ -20,6 +20,7 @@ Personal game-day fueling, recovery and readiness for athletes, parents and coac
 | Team | Coaches create teams with a join code and see a limited roster; players join or leave |
 | Reminders | Fuel, hydration, recovery, check-in and wind-down nudges from the athlete's schedule |
 | Account | Password reset/change, data export, full account deletion |
+| Weather | Forecast at each game's ZIP (National Weather Service, incl. WBGT). Heat flags follow the NJSIAA policy; heat raises fluids, adds pre-hydration, pre-cooling and electrolytes; cold raises carbs, lengthens warm-ups and adds warm drinks and layers |
 
 Accounts are **athlete** (13+), **parent** (manages several kids, required under 13) or **coach**.
 

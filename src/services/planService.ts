@@ -12,6 +12,10 @@ import type {
 } from "../data/repository.js";
 import { buildMatchDayPlan, type MatchDayPlan } from "../domain/plan.js";
 import { buildGameDayTimeline, type GameDayTimeline } from "../domain/timeline.js";
+import { eventWeatherPlan } from "../domain/weather.js";
+import type { ScheduledEvent } from "../domain/profile.js";
+import type { WeatherProvider } from "../weather/nws.js";
+import { loadWeather } from "./weatherService.js";
 
 export type PlanResult =
   | { ok: true; value: MatchDayPlan }
@@ -40,7 +44,15 @@ export class PlanService {
   constructor(
     private readonly profiles: AthleteProfileRepository,
     private readonly checkins: CheckInRepository,
+    private readonly weather: WeatherProvider | null = null,
   ) {}
+
+  /** Weather plan for the game on `date` at `kickoff` (or an ad-hoc game at the home ZIP). */
+  private async gameWeather(profile: import("../domain/profile.js").AthleteProfile, date: string, kickoff: string, match?: ScheduledEvent) {
+    const wx = await loadWeather(this.weather, profile, date, 1);
+    const e: ScheduledEvent = match || { type: "match", startTime: `${date}T${kickoff}`, importance: "high" };
+    return eventWeatherPlan(profile, e, wx);
+  }
 
   async matchDay(
     ownerId: string,
@@ -68,12 +80,14 @@ export class PlanService {
       assumedKickoff = false;
     }
 
+    const weather = await this.gameWeather(profile, req.date, kickoff, match);
     const value = buildMatchDayPlan(profile, {
       date: req.date,
       kickoff,
       assumedKickoff,
       conditions,
       checkin,
+      weather,
     });
     return { ok: true, value };
   }
@@ -90,8 +104,8 @@ export class PlanService {
     const checkin = await this.checkins.getByDate(ownerId, profileId, req.date);
 
     const match = (profile.schedule?.events || []).find(
-      (e) => e.type === "match" && e.startTime.slice(0, 10) === req.date,
-    );
+      (e) => e.type === "match" && e.startTime.slice(0, 10) === req.date && (!req.kickoff || e.startTime.slice(11, 16) === req.kickoff),
+    ) || (profile.schedule?.events || []).find((e) => e.type === "match" && e.startTime.slice(0, 10) === req.date);
     let kickoff = req.kickoff || "19:00";
     let conditions = req.conditions;
     if (match) {
@@ -111,6 +125,7 @@ export class PlanService {
       );
     }
 
+    const weather = await this.gameWeather(profile, req.date, kickoff, match && match.startTime.slice(11, 16) === kickoff ? match : undefined);
     const value = buildGameDayTimeline(profile, {
       date: req.date,
       kickoff,
@@ -119,6 +134,7 @@ export class PlanService {
       conditions,
       playsTomorrow,
       checkin,
+      weather,
     });
     return { ok: true, value };
   }

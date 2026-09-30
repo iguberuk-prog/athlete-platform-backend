@@ -382,6 +382,8 @@ function validateSchedule(errors: ValidationError[], input: ProfileInput): void 
   }
 }
 
+const isZip = (v: unknown): boolean => typeof v === "string" && /^\d{5}$/.test(v);
+
 const isHHMM = (v: unknown): boolean =>
   typeof v === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(v);
 
@@ -395,6 +397,7 @@ function validateRoutine(errors: ValidationError[], input: ProfileInput): void {
   for (const f of ["wakeTime", "bedTime", "usualPracticeTime"] as const) {
     if (r[f] !== undefined && !isHHMM(r[f])) errors.push({ path: `routine.${f}`, message: "must be HH:MM" });
   }
+  if (r.homeZip !== undefined && !isZip(r.homeZip)) errors.push({ path: "routine.homeZip", message: "must be a 5-digit ZIP code" });
 }
 
 // --- top-level: profile ----------------------------------------------------
@@ -465,6 +468,8 @@ export function validateEventInputs(events: unknown): ValidationResult {
       errors.push({ path: `${base}.startTime`, message: "must be an ISO-8601 datetime" });
     if (ev.importance !== undefined)
       enumCheck(errors, `${base}.importance`, ev.importance, EVENT_IMPORTANCE, false);
+    if (ev.zip !== undefined && !(typeof ev.zip === "string" && /^\d{5}$/.test(ev.zip)))
+      errors.push({ path: `${base}.zip`, message: "must be a 5-digit ZIP code" });
   });
   return { valid: errors.length === 0, errors };
 }

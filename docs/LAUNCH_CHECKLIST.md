@@ -9,7 +9,7 @@ What is built, and the steps only you can do (they need your accounts). In order
 3. **GitHub Desktop**: commit and push. Netlify deploys on its own.
 4. On your phone, open the site, sign up, and run through: profile > add a game > Game Day > check-in > Recovery > Account > Delete account.
 
-Netlify env vars are unchanged (`DB_BACKEND`, `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `SUPABASE_ANON_KEY`, `ADMIN_KEY`). Do NOT set `ALLOW_DEV_AUTH` on Netlify.
+Netlify env vars: `DB_BACKEND`, `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `SUPABASE_ANON_KEY`, `ADMIN_KEY`. Recommended: `NWS_USER_AGENT` = `AthletePerformanceApp (your-support-email)`. The National Weather Service asks apps to identify themselves with a contact email. Do NOT set `ALLOW_DEV_AUTH` or `WEATHER=demo` on Netlify.
 
 ## 2. Use it with the team this week
 

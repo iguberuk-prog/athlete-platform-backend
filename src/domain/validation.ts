@@ -400,7 +400,12 @@ function validateSchedule(errors: ValidationError[], input: ProfileInput): void 
   if (s.feeds !== undefined)
     arrayCheck(errors, "schedule.feeds", s.feeds, false, (v, i) => {
       const f = v as unknown as Record<string, unknown>;
-      if (!f || !isNonEmptyString(f.id) || !isFeedUrl(f.url))
+      const signedIn = f && (f.kind === "teamsnap" || f.kind === "google") && typeof f.url === "string" && new RegExp(`^${f.kind}:[^\\s]{1,300}$`).test(f.url);
+      if (f && f.kind !== undefined && !["ics", "teamsnap", "google"].includes(f.kind as string))
+        errors.push({ path: `schedule.feeds[${i}].kind`, message: "must be ics, teamsnap or google" });
+      if (f && f.keywords !== undefined && !(Array.isArray(f.keywords) && f.keywords.length <= 10 && f.keywords.every((k) => typeof k === "string" && k.length <= 40)))
+        errors.push({ path: `schedule.feeds[${i}].keywords`, message: "up to 10 short words" });
+      if (!f || !isNonEmptyString(f.id) || !(signedIn || isFeedUrl(f.url)))
         errors.push({ path: `schedule.feeds[${i}].url`, message: "must be an https:// or webcal:// calendar link" });
       if (f && f.defaultZip !== undefined && !isZip(f.defaultZip))
         errors.push({ path: `schedule.feeds[${i}].defaultZip`, message: "must be a 5-digit ZIP code" });

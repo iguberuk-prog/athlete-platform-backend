@@ -46,6 +46,7 @@ export async function render(el, ctx) {
     ${p ? tile("#/meals", "fork", "Meals", "Week plan, recipes and eating out") : ""}
     ${p ? tile("#/program", "user", "My program", "Age-based fuel, sleep and recovery") : ""}
     ${p ? tile("#/profile/edit?food=1", "heart", "Food safety", "Allergies, diets and foods to avoid") : ""}
+    ${p ? tile("#/connect", "calendar", "Team apps", "TeamSnap, SportsEngine, PlayMetrics, Google and more") : ""}
     ${p ? tile("#/schedule", "calendar", "Schedule", "Games, practices and repeats") : ""}
     ${p ? tile("#/trends", "chart", "Trends", "Sleep, readiness and training load") : ""}
     ${p ? tile("#/grocery", "cart", "Grocery list", "This week's shopping, allergy-safe") : ""}

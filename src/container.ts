@@ -40,6 +40,7 @@ import { TeamHubService } from "./services/teamHubService.js";
 import { BillingService } from "./services/billingService.js";
 import { MarketService } from "./services/marketService.js";
 import { FunService } from "./services/funService.js";
+import { ConnectService } from "./services/connectService.js";
 import { ProfileService } from "./services/profileService.js";
 import { CheckInService } from "./services/checkinService.js";
 import { PlanService } from "./services/planService.js";
@@ -70,6 +71,7 @@ interface Services {
   market: MarketService;
   records: RecordRepository;
   fun: FunService;
+  connect: ConnectService;
 }
 
 function wire(p: AthleteProfileRepository, c: CheckInRepository, t: TeamRepository, r: RecordRepository): Services {
@@ -81,6 +83,7 @@ function wire(p: AthleteProfileRepository, c: CheckInRepository, t: TeamReposito
   const family = new FamilyService(p, r);
   const mailer = new ResendMailer();
   const clubs = new ClubService(p, c, t, r, mailer, weather);
+  const calendar = new CalendarService(p, family);
   return {
     profiles: new ProfileService(p),
     checkins: new CheckInService(c, p),
@@ -90,7 +93,7 @@ function wire(p: AthleteProfileRepository, c: CheckInRepository, t: TeamReposito
     account: new AccountService(p, c, t, r),
     family,
     health: new HealthService(p, c, family, weather, r),
-    calendar: new CalendarService(p, family),
+    calendar,
     products: new ProductService(p, family, r),
     reports: new ReportService(p, c, family, r, mailer),
     integrations: new IntegrationService(p, c, family, r),
@@ -102,6 +105,7 @@ function wire(p: AthleteProfileRepository, c: CheckInRepository, t: TeamReposito
     market: new MarketService(p, family, r, clubs, mailer),
     records: r,
     fun: new FunService(p, c, family, r),
+    connect: new ConnectService(p, family, r, calendar),
   };
 }
 
@@ -175,3 +179,4 @@ export const getBillingService = () => getServices().billing;
 export const getMarketService = () => getServices().market;
 export const getRecordRepository = () => getServices().records;
 export const getFunService = () => getServices().fun;
+export const getConnectService = () => getServices().connect;

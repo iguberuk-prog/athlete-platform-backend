@@ -504,3 +504,13 @@ details.rcard[open] > summary { margin-bottom: 6px; }
 .kitForm { display: grid; gap: 8px; margin-top: 10px; }
 .card h3.q, .card h3.ftitle { font-size: 20px; text-transform: none; letter-spacing: 0; color: var(--text); line-height: 1.3; }
 .card.freeze { margin-top: 12px; }
+
+/* ---- connect team apps ---- */
+.cnapp { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r2); margin-bottom: 8px; overflow: hidden; }
+.cnapp.open { border-color: var(--line2); }
+.cnhead { display: flex; gap: 12px; align-items: center; width: 100%; padding: 12px 14px; background: none; border: 0; cursor: pointer; color: inherit; font: inherit; min-height: 56px; }
+.cnlogo { width: 36px; height: 36px; border-radius: 10px; background: var(--panel3); display: grid; place-items: center; font-weight: 800; color: var(--lime); flex: none; }
+.cnbox { padding: 0 14px 14px; }
+.cnform { margin-top: 12px; }
+.picker .check { margin: 6px 0; }
+.bad { color: var(--bad); }

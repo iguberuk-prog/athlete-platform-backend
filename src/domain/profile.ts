@@ -326,8 +326,14 @@ export interface SchoolDay {
 /** A team calendar the athlete subscribed to (TeamSnap, SportsEngine, PlayMetrics, ...). */
 export interface CalendarFeed {
   id: string;
-  /** https:// or webcal:// subscription link. */
+  /** https:// or webcal:// subscription link. For sign-in feeds, "teamsnap:<teamId>" or "google:<calendarId>". */
   url: string;
+  /** How it's read: a calendar link (default), or a signed-in TeamSnap team or Google calendar. */
+  kind?: "ics" | "teamsnap" | "google";
+  /** Which team app it came from (see TEAM_APPS). */
+  app?: string;
+  /** Google only: words that mark an event as a soccer event, e.g. ["soccer", "Lions U14"]. */
+  keywords?: string[];
   name?: string;
   /** ZIP used when an event's address has no ZIP. */
   defaultZip?: string;

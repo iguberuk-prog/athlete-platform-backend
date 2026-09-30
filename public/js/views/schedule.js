@@ -1,6 +1,6 @@
 // Schedule: upcoming games and practices, add one-offs or weekly repeats, remove.
 
-import { $, $$, esc, todayStr, to12, relDay, niceDate, toDateStr, msg, toast, addDays } from "../ui.js";
+import { $, $$, esc, todayStr, to12, relDay, niceDate, toDateStr, msg, toast, addDays, icon } from "../ui.js";
 import { api, errText } from "../api.js";
 import { active, loadProfiles, render as rerender, syncReminders, isCoach } from "../app.js";
 import { lookupZip } from "./profile.js";
@@ -24,18 +24,8 @@ export async function render(el, ctx) {
 
   const feeds = p.schedule?.feeds || [];
   el.innerHTML = `
-    <div class="card">
-      <h2>Team calendars</h2>
-      <p class="sub">Copy the "subscribe" or "export calendar" link from TeamSnap, SportsEngine, PlayMetrics, GameChanger, LeagueApps, Heja, Spond or Google Calendar. Games and practices come in on their own and stay up to date. On two teams? Add both.</p>
-      ${feeds.map((f) => `<div class="feed"><div style="flex:1;min-width:0"><div class="rowtitle">${esc(f.name || "Team calendar")}</div>
-        <div class="rowsub">${f.lastError ? `Problem: ${esc(f.lastError)}` : f.lastSyncedAt ? `${f.eventCount ?? 0} events · synced ${esc(new Date(f.lastSyncedAt).toLocaleString())}` : "Not synced yet"}</div></div>
-        <button class="btn ghost sm" data-act="feedDel" data-id="${esc(f.id)}">Remove</button></div>`).join("")}
-      <form data-submit="feedAdd" novalidate>
-        <input class="input" id="feedUrl" placeholder="webcal://… or https://….ics" autocomplete="off" inputmode="url">
-        <div class="row2" style="margin-top:8px"><input class="input" id="feedName" placeholder="Name (e.g. Club team)"><input class="input" id="feedZip" inputmode="numeric" maxlength="5" placeholder="Usual field ZIP"></div>
-        <div class="actions"><button class="btn primary" type="submit">Add calendar</button>${feeds.length ? `<button class="btn ghost" type="button" data-act="feedSync">Sync now</button>` : ""}</div>
-      </form>
-    </div>
+    <button class="tile" data-act="nav" data-to="#/connect"><span class="ic">${icon("calendar")}</span><span><div class="tt">${feeds.length ? `${feeds.length} team schedule${feeds.length === 1 ? "" : "s"} connected` : "Connect your team app"}</div>
+      <div class="ts">${feeds.some((f) => f.lastError) ? "One needs attention. Tap to fix." : "TeamSnap, SportsEngine, PlayMetrics, GameChanger, LeagueApps, GotSport and more"}</div></span><span class="chev">›</span></button>
 
     <form class="card" data-submit="addEvent" novalidate>
       <h2>Add to schedule</h2>

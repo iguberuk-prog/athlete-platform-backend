@@ -9,7 +9,8 @@
 
 import { randomUUID } from "node:crypto";
 import type { AthleteProfileRepository } from "../data/repository.js";
-import type { AthleteProfile, CalendarFeed, ProfileInput } from "../domain/profile.js";
+import type { AthleteProfile, CalendarFeed, ProfileInput, ScheduledEvent } from "../domain/profile.js";
+import { detectApp } from "../domain/teamApps.js";
 import { parseIcs, toScheduled } from "../domain/ics.js";
 import { isFeedUrl } from "../domain/validation.js";
 import type { FamilyService } from "./familyService.js";
@@ -39,6 +40,9 @@ const strip = (p: AthleteProfile): ProfileInput => {
   return rest;
 };
 
+/** Reads events for a signed-in feed (TeamSnap team, Google calendar). Throws with a readable message. */
+export type ProviderReader = (p: AthleteProfile, feed: CalendarFeed, fromMs: number, toMs: number) => Promise<ScheduledEvent[]>;
+
 export type CalResult<T> = { ok: true; value: T } | { ok: false; code: "not_found" | "invalid"; message?: string };
 
 export class CalendarService {
@@ -46,7 +50,10 @@ export class CalendarService {
     private readonly profiles: AthleteProfileRepository,
     private readonly family: FamilyService,
     private readonly fetcher: (url: string) => Promise<string> = fetchFeed,
+    private reader?: ProviderReader,
   ) {}
+
+  setReader(r: ProviderReader) { this.reader = r; }
 
   private async load(userId: string, id: string) {
     const owner = await this.family.ownerFor(userId, id);
@@ -63,10 +70,37 @@ export class CalendarService {
     const feeds = r.p.schedule?.feeds || [];
     if (feeds.length >= 6) return { ok: false, code: "invalid", message: "Up to 6 team calendars per player." };
     if (feeds.some((f) => f.url === url)) return { ok: false, code: "invalid", message: "That calendar is already added." };
-    const feed: CalendarFeed = { id: randomUUID(), url: url.trim(), name: String(name || "Team calendar").slice(0, 60), defaultZip: defaultZip || undefined };
+    const app = detectApp(url);
+    const feed: CalendarFeed = { id: randomUUID(), url: url.trim(), kind: "ics", app: app?.id, name: String(name || (app && app.id !== "ical" ? `${app.name} calendar` : "Team calendar")).slice(0, 60), defaultZip: defaultZip || undefined };
     const synced = await this.syncOne({ ...r.p, schedule: { ...(r.p.schedule || { events: [] }), feeds: [...feeds, feed] } }, feed.id);
     const saved = await this.profiles.update(r.owner, id, strip(synced));
     return saved ? { ok: true, value: saved } : { ok: false, code: "not_found" };
+  }
+
+  /** Add feeds from a signed-in app (called by ConnectService after the user picks teams or calendars). */
+  async addSignedIn(owner: string, p: AthleteProfile, adds: { kind: "teamsnap" | "google"; ref: string; name: string; keywords?: string[] }[]): Promise<AthleteProfile | null> {
+    const s = p.schedule || { events: [] };
+    let feeds = [...(s.feeds || [])];
+    const newIds: string[] = [];
+    for (const a of adds) {
+      const url = `${a.kind}:${a.ref}`;
+      const existing = feeds.find((f) => f.url === url);
+      if (existing) { feeds = feeds.map((f) => (f.url === url ? { ...f, keywords: a.keywords ?? f.keywords } : f)); newIds.push(existing.id); continue; }
+      if (feeds.length >= 8) break;
+      const f: CalendarFeed = { id: randomUUID(), url, kind: a.kind, app: a.kind, name: a.name.slice(0, 60), keywords: a.keywords?.length ? a.keywords : undefined };
+      feeds.push(f); newIds.push(f.id);
+    }
+    let cur: AthleteProfile = { ...p, schedule: { ...s, feeds } };
+    for (const id of newIds) cur = await this.syncOne(cur, id);
+    return this.profiles.update(owner, p.id, strip(cur));
+  }
+
+  /** Drop every feed of one signed-in kind (on disconnect). */
+  async removeKind(owner: string, p: AthleteProfile, kind: "teamsnap" | "google"): Promise<AthleteProfile | null> {
+    const s = p.schedule || { events: [] };
+    const gone = new Set((s.feeds || []).filter((f) => f.kind === kind).map((f) => f.id));
+    if (!gone.size) return p;
+    return this.profiles.update(owner, p.id, strip({ ...p, schedule: { ...s, feeds: (s.feeds || []).filter((f) => !gone.has(f.id)), events: (s.events || []).filter((e) => !gone.has(e.source || "")) } }));
   }
 
   async remove(userId: string, id: string, feedId: string): Promise<CalResult<AthleteProfile>> {
@@ -104,8 +138,15 @@ export class CalendarService {
     let upd: CalendarFeed;
     let events = s.events || [];
     try {
-      const text = await this.fetcher(feed.url);
-      const evs = toScheduled(parseIcs(text, p.timezone, now - 14 * 86_400_000, now + 180 * 86_400_000), feed.id, p.timezone, feed.defaultZip || p.routine?.homeZip);
+      const from = now - 14 * 86_400_000, to = now + 180 * 86_400_000;
+      let evs: ScheduledEvent[];
+      if (feed.kind === "teamsnap" || feed.kind === "google") {
+        if (!this.reader) throw new Error("Sign-in calendars aren't available right now.");
+        evs = await this.reader(p, feed, from, to);
+      } else {
+        const text = await this.fetcher(feed.url);
+        evs = toScheduled(parseIcs(text, p.timezone, from, to), feed.id, p.timezone, feed.defaultZip || p.routine?.homeZip);
+      }
       events = [...events.filter((e) => e.source !== feed.id), ...evs];
       upd = { ...feed, lastSyncedAt: new Date().toISOString(), lastError: undefined, eventCount: evs.length };
     } catch (err) {

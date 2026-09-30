@@ -35,6 +35,7 @@ import * as budget from "./views/budget.js";
 import * as season from "./views/season.js";
 import * as ask from "./views/ask.js";
 import * as fun from "./views/fun.js";
+import * as connect from "./views/connect.js";
 
 export const state = {
   user: null,          // { email, role }
@@ -47,12 +48,12 @@ const VIEWS = {
   today, gameday, recovery, checkin, more, schedule, trends, grocery, team,
   profile, program, reminders: settings, account: settings,
   health, meals, scan, devices, family, report, club, teamhub, experts,
-  journal, progress, mind, tournament, emergency, safesport, budget, season, ask, fun,
+  journal, progress, mind, tournament, emergency, safesport, budget, season, ask, fun, connect,
 };
 
 // Views register click handlers by name; buttons carry data-act="name".
 const actions = {};
-for (const v of [auth, profile, today, gameday, recovery, checkin, more, schedule, trends, grocery, team, settings, program, health, meals, scan, devices, family, report, club, teamhub, experts, journal, progress, mind, tournament, emergency, safesport, budget, season, ask, fun]) {
+for (const v of [auth, profile, today, gameday, recovery, checkin, more, schedule, trends, grocery, team, settings, program, health, meals, scan, devices, family, report, club, teamhub, experts, journal, progress, mind, tournament, emergency, safesport, budget, season, ask, fun, connect]) {
   Object.assign(actions, v.actions || {});
 }
 
@@ -115,7 +116,7 @@ const TITLES = {
   reminders: "Reminders", account: "Account", program: "My program",
   health: "Health", meals: "Meals", scan: "Scan food", devices: "Devices", family: "Family", report: "Weekly report",
   club: "Club", teamhub: "Team", experts: "Dietitians and camps",
-  journal: "Journal", progress: "Progress", mind: "Mental skills", tournament: "Tournament", emergency: "Emergency card", safesport: "Safe sport", budget: "Season budget", season: "Season review", ask: "Ask", fun: "Fun",
+  journal: "Journal", progress: "Progress", mind: "Mental skills", tournament: "Tournament", emergency: "Emergency card", safesport: "Safe sport", budget: "Season budget", season: "Season review", ask: "Ask", fun: "Fun", connect: "Team apps",
 };
 
 const FUN_TITLES = { quiz: "Car ride quiz", cook: "Family cook night", hunt: "Grocery hunt", wrapped: "Season wrapped" };
@@ -153,11 +154,11 @@ export async function render() {
   }
   if (!VIEWS[name]) { name = isCoach() && !state.profiles.length ? "team" : "today"; state.route.name = name; }
   // Screens that need a player profile.
-  if (!active() && ["health", "meals", "scan", "devices", "report", "journal", "progress", "mind", "tournament", "emergency", "budget", "season", "ask", "fun"].includes(name)) { name = isCoach() ? "team" : "today"; state.route.name = name; }
+  if (!active() && ["health", "meals", "scan", "devices", "report", "journal", "progress", "mind", "tournament", "emergency", "budget", "season", "ask", "fun", "connect"].includes(name)) { name = isCoach() ? "team" : "today"; state.route.name = name; }
 
   const tabs = needsProfile ? [] : tabsFor();
   const tabNames = tabs.map((t) => t[0]);
-  const showSwitch = ["today", "gameday", "recovery", "checkin", "schedule", "trends", "grocery", "program", "health", "meals", "scan", "devices", "report", "journal", "progress", "mind", "tournament", "emergency", "budget", "season", "ask", "fun"].includes(name) ||
+  const showSwitch = ["today", "gameday", "recovery", "checkin", "schedule", "trends", "grocery", "program", "health", "meals", "scan", "devices", "report", "journal", "progress", "mind", "tournament", "emergency", "budget", "season", "ask", "fun", "connect"].includes(name) ||
     (name === "team" && !isCoach());
   const titleText = name === "profile" && state.route.sub === "new"
     ? (isParent() ? "Add an athlete" : "Set up your profile")

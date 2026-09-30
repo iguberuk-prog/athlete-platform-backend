@@ -20,6 +20,7 @@ import * as Notifications from "expo-notifications";
 import * as SplashScreen from "expo-splash-screen";
 import Constants from "expo-constants";
 import { WebView, type WebViewMessageEvent } from "react-native-webview";
+import { updateWidgets } from "./src/widget";
 import { APP_HOST, APP_URL } from "./src/config";
 import { clearReminders, scheduleReminders, type Reminder } from "./src/notifications";
 import { healthAvailable, readLastNight } from "./src/health";
@@ -33,7 +34,8 @@ type WebMsg =
   | { type: "reminders"; items: Reminder[]; name?: string }
   | { type: "health:request" }
   | { type: "signout" }
-  | { type: "haptic" };
+  | { type: "haptic" }
+  | { type: "widget"; next?: { title: string; at: string; eatBy?: string; tip?: string } | null; card?: { name: string; line: string } | null };
 
 export default function App() {
   const web = useRef<WebView>(null);
@@ -70,6 +72,9 @@ export default function App() {
       }
       case "signout":
         await clearReminders().catch(() => {});
+        break;
+      case "widget":
+        updateWidgets({ next: msg.next ?? null, card: msg.card ?? null });
         break;
       case "haptic":
         Haptics.selectionAsync().catch(() => {});

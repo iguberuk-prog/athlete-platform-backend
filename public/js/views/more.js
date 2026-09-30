@@ -37,7 +37,10 @@ export async function render(el, ctx) {
     ${head}
     ${install}
     <div class="sectionTitle">Plan</div>
+    ${p ? tile("#/ask", "chat", "Ask", "Questions answered with your food rules") : ""}
     ${p ? tile("#/scan", "scan", "Scan food", "Is it safe, and is now a good time?") : ""}
+    ${p ? tile("#/journal", "book", "Journal and stats", "30-second post-game reflection") : ""}
+    ${p ? tile("#/progress", "flame", "Progress", "Streaks, badges and injury risk") : ""}
     ${p ? tile("#/health", "pulse", "Health", "Injuries, concussion steps, warm-ups, school and travel") : ""}
     ${p ? tile("#/meals", "fork", "Meals", "Week plan, recipes and eating out") : ""}
     ${p ? tile("#/program", "user", "My program", "Age-based fuel, sleep and recovery") : ""}
@@ -46,6 +49,12 @@ export async function render(el, ctx) {
     ${p ? tile("#/trends", "chart", "Trends", "Sleep, readiness and training load") : ""}
     ${p ? tile("#/grocery", "cart", "Grocery list", "This week's shopping, allergy-safe") : ""}
     ${p ? tile("#/report", "doc", "Weekly report", "The week in one page") : ""}
+    ${p ? tile("#/tournament", "bag", "Tournament planner", "Fuel between games, cooler, hotel") : ""}
+    ${p ? tile("#/mind", "brain", "Mental skills", "Nerves, mistakes, the bench") : ""}
+    ${p ? tile("#/season", "trophy", "Season review", "Save the season as a PDF") : ""}
+    ${p ? tile("#/budget", "wallet", "Season budget", "Fees, travel and gear") : ""}
+    ${p ? tile("#/emergency", "alert", "Emergency card", "Allergies, EpiPen, asthma, contacts") : ""}
+    ${tile("#/safesport", "shield", "Safe sport", "Warning signs and how to report")}
     ${p && (p.features?.appleHealth || p.features?.whoop || p.features?.garmin) ? tile("#/devices", "watch", "Devices", "Whoop, Oura, Garmin, Apple Health") : ""}
     ${tile("#/family", "family", "Family", "Link parent and player accounts")}
     ${tile("#/team", "team", isCoach() ? "My teams" : "Team", isCoach() ? "Rosters, readiness and join codes" : "Join your coach's team")}

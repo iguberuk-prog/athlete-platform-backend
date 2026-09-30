@@ -20,8 +20,24 @@ export function statusPill(readiness) {
 
 export async function render(el, ctx) {
   const p = ctx.profile;
-  const r = await api(`/api/profiles/${p.id}/today?date=${todayStr()}&now=${encodeURIComponent(nowStr())}`);
+  const [r, nx, pg, rk] = await Promise.all([
+    api(`/api/profiles/${p.id}/today?date=${todayStr()}&now=${encodeURIComponent(nowStr())}`),
+    api(`/api/profiles/${p.id}/next?now=${encodeURIComponent(nowStr())}`),
+    api(`/api/profiles/${p.id}/progress?date=${todayStr()}`),
+    api(`/api/profiles/${p.id}/risk?date=${todayStr()}`),
+  ]);
   if (!ctx.seq()) return;
+  const next = nx.ok ? nx.data.next : null;
+  const prog = pg.ok ? pg.data : null;
+  const risk = rk.ok ? rk.data : null;
+  const streak = prog?.streaks.find((x) => x.id === "checkin");
+  const upNext = next && next.minutesAway <= 36 * 60 ? `<div class="card upnext">
+      <div class="eyebrow">Next up</div>
+      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px"><h3 style="margin:0">${esc(next.title)} · ${esc(next.time)}</h3><b class="big" data-countdown="${esc(next.at)}">${esc(untilText(next.at))}</b></div>
+      ${next.eatBy ? `<div class="pill ready" style="margin-top:8px"><span class="dot"></span>${esc(next.eatBy)}</div>` : ""}
+      <p class="rowsub" style="margin:8px 0 0">${esc(next.tip)}</p></div>` : "";
+  const topStrip = `${streak ? `<button class="streak" data-act="nav" data-to="#/progress">${icon("flame")} ${streak.current} day${streak.current === 1 ? "" : "s"}${prog.newest ? ` · New badge: ${esc(prog.newest)}` : ""}</button>` : ""}
+    ${risk && risk.level !== "low" ? `<button class="tile" data-act="nav" data-to="#/progress" style="border-color:${risk.level === "high" ? "rgba(255,107,107,.6)" : "rgba(255,200,87,.5)"}"><span class="ic">!</span><span><div class="tt">${risk.level === "high" ? "High" : "Rising"} injury risk this week</div><div class="ts">${esc(risk.factors[0]?.text || "")}</div></span><span class="chev">›</span></button>` : ""}`;
   if (!r.ok) { el.innerHTML = `<div class="msg err">${esc(errText(r))}</div>`; return; }
   const t = r.data;
 
@@ -74,7 +90,9 @@ export async function render(el, ctx) {
   tiles.push(["schedule", "calendar", "Schedule", "Add games and practices"]);
 
   el.innerHTML = `
+    ${topStrip}
     ${t.safety.confirmed ? "" : `<button class="tile" data-act="nav" data-to="#/profile/edit?food=1" style="border-color:rgba(255,200,87,.5)"><span class="ic">!</span><span><div class="tt">Confirm food safety</div><div class="ts">Two minutes. Makes sure nothing we suggest causes a problem.</div></span><span class="chev">›</span></button>`}
+    ${upNext}
     <section class="hero">
       <button class="progchip" data-act="nav" data-to="#/program">${esc(t.program.name)} · ${esc(t.program.ages)}</button>
       <div class="greet">${greet}${t.program.parentVoice ? "" : `, ${esc(t.firstName)}`}</div>

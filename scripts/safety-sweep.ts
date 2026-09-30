@@ -14,6 +14,10 @@ import { buildMealPlan, eatingOutGuide, safeRecipes } from "../src/domain/meals.
 import { buildHealthStatus } from "../src/domain/health.js";
 import { schoolDayPlan, travelPlans } from "../src/domain/dayplans.js";
 import { teamMenu } from "../src/domain/teamMeal.js";
+import { tournamentPlans } from "../src/domain/tournament.js";
+import { nextUp } from "../src/domain/dayplans.js";
+import { positionFuel } from "../src/domain/daily.js";
+import { mentalSkills } from "../src/domain/mental.js";
 import type { AthleteProfile, ProfileInput } from "../src/domain/profile.js";
 import { buildMatchDayPlan } from "../src/domain/plan.js";
 import { buildGameDayTimeline } from "../src/domain/timeline.js";
@@ -111,6 +115,8 @@ function allText(p: AthleteProfile, withProgram = true): string {
   for (let i = 0; i < 7; i++) out.push(schoolDayPlan(withSchool, addDays(START, i)));
   out.push(travelPlans({ ...withSchool, schedule: { events: [...(p.schedule?.events || []), { type: "tournament", startTime: `${addDays(START, 4)}T09:00`, importance: "high", zip: "90210" }] } } as AthleteProfile, START, WX));
   out.push(teamMenu([p]), teamMenu([p], { gameDay: true }));
+  const tourney = { ...p, schedule: { events: [0, 1, 2].map((i) => ({ type: "match" as const, startTime: `${addDays(START, 4 + (i > 1 ? 1 : 0))}T${["09:00", "13:30", "10:00"][i]}:00-04:00`, importance: "high" as const })) } } as AthleteProfile;
+  out.push(tournamentPlans(tourney, START), nextUp(tourney, `${addDays(START, 4)}T06:00`), nextUp(tourney, `${addDays(START, 4)}T08:00`), nextUp(tourney, `${addDays(START, 3)}T12:00`), positionFuel(p), mentalSkills(p));
   // The program's safety summary and "avoid" lists intentionally name excluded foods; scan the rest.
   if (withProgram) out.push(buildProgram(p));
   return JSON.stringify(out, noAvoidLists);
@@ -205,6 +211,7 @@ for (const [dob, age] of AGES) {
   check("sweep covers eating out", t.includes("burger place"));
   check("sweep covers school day", t.includes("mid-morning snack") || t.includes("pre-practice snack"));
   check("sweep covers travel", t.includes("cooler"));
+  check("sweep covers tournament planner", t.includes("between games") || t.includes("1 to 2 hours"));
 }
 
 // The sweep must really be scanning weather text.

@@ -146,6 +146,14 @@ export function dailyTargets(profile: AthleteProfile, date: string, type = class
       note = "Rest day: normal balanced meals. Protein and sleep still matter.";
   }
 
+  // Position: keepers cover about half the distance of outfield players;
+  // center backs a bit less than midfielders, fullbacks and wingers.
+  const pos = positionFuel(profile);
+  if (type !== "rest" && pos.carbDelta) {
+    perKg = [Math.max(3, perKg[0] + pos.carbDelta), Math.max(4, perKg[1] + pos.carbDelta)];
+    note += " " + pos.note;
+  }
+
   const trainingMin =
     type === "match" ? 110 : type === "training" ? profile.training?.avgSessionMinutes || 90 : 0;
   const band = bandForAge(effectiveAge(profile.identity));
@@ -271,4 +279,40 @@ export function buildToday(
     disclaimer:
       "Starting targets from published sports-nutrition guidance. Not medical advice. Check with a doctor or dietitian for medical conditions.",
   };
+}
+
+/** Position-specific fueling. Baseline = high-running outfield player. */
+export function positionFuel(profile: AthleteProfile): { position: string; carbDelta: number; note: string; tips: string[] } {
+  const pos = (profile.sport.positions || [])[0] || "";
+  switch (pos) {
+    case "goalkeeper":
+      return { position: "goalkeeper", carbDelta: -1.5, note: "Keeper: a little less fuel than field players on busy days.", tips: [
+        "You run about half as far as field players, but explode often: protein at every meal for power.",
+        "Keep a bottle in the goal and sip in every stoppage. Keepers forget to drink.",
+        "Cold days hit keepers hardest: layers, and a warm drink at half-time.",
+      ] };
+    case "defender":
+      return { position: "center back", carbDelta: -0.5, note: "Center back: slightly less fuel than midfielders.", tips: [
+        "Strength and heading duels: protein spread over the day.",
+        "Lots of short sprints: carbs before games still matter.",
+      ] };
+    case "midfielder":
+      return { position: "midfielder", carbDelta: 0, note: "", tips: [
+        "Midfielders cover the most ground: the most carbs of any position on game days.",
+        "Sip at every break. Top up carbs at half-time.",
+      ] };
+    case "fullback":
+    case "winger":
+      return { position: pos, carbDelta: 0, note: "", tips: [
+        "Repeated sprints up and down the line: full carbs on game days and a half-time top-up.",
+        "Hamstrings work hard in your position: never skip the warm-up.",
+      ] };
+    case "forward":
+      return { position: "forward", carbDelta: -0.25, note: "", tips: [
+        "Short explosive sprints: carbs 2 to 3 hours before, and stay light on your feet.",
+        "Protein after games helps you recover for the next sprint-heavy match.",
+      ] };
+    default:
+      return { position: pos, carbDelta: 0, note: "", tips: [] };
+  }
 }

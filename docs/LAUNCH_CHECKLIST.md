@@ -21,6 +21,8 @@ New in this release:
 - Whoop: create an app at developer.whoop.com, redirect URI `{APP_URL}/api/integrations/whoop/callback`, then set `WHOOP_CLIENT_ID` and `WHOOP_CLIENT_SECRET`.
 - Oura: create an app at cloud.ouraring.com/oauth/applications, redirect URI `{APP_URL}/api/integrations/oura/callback`, then set `OURA_CLIENT_ID` and `OURA_CLIENT_SECRET`. Oura allows 10 users until they approve the app.
 - Garmin: apply at developer.garmin.com (Health API). Leave `GARMIN_APPROVED` unset until approved.
+- Ask the app uses the same `ANTHROPIC_API_KEY` as meal photos.
+- iPhone widgets (game countdown, emergency card): run `npm install` in `mobile/`, then `npx expo prebuild --clean` and an EAS build. The widget needs the App Group `group.com.guberuk.athleteperformance` enabled for the app ID in your Apple developer account (EAS can do this for you).
 - Scheduled functions run on their own: `daily-sync` (calendars and devices, daily) and `weekly-report` (Sunday evening).
 
 ## 2. Use it with the team this week

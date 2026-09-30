@@ -22,6 +22,15 @@ import * as scan from "./views/scan.js";
 import * as devices from "./views/devices.js";
 import * as family from "./views/family.js";
 import * as report from "./views/report.js";
+import * as journal from "./views/journal.js";
+import * as progress from "./views/progress.js";
+import * as mind from "./views/mind.js";
+import * as tournament from "./views/tournament.js";
+import * as emergency from "./views/emergency.js";
+import * as safesport from "./views/safesport.js";
+import * as budget from "./views/budget.js";
+import * as season from "./views/season.js";
+import * as ask from "./views/ask.js";
 
 export const state = {
   user: null,          // { email, role }
@@ -34,11 +43,12 @@ const VIEWS = {
   today, gameday, recovery, checkin, more, schedule, trends, grocery, team,
   profile, program, reminders: settings, account: settings,
   health, meals, scan, devices, family, report,
+  journal, progress, mind, tournament, emergency, safesport, budget, season, ask,
 };
 
 // Views register click handlers by name; buttons carry data-act="name".
 const actions = {};
-for (const v of [auth, profile, today, gameday, recovery, checkin, more, schedule, trends, grocery, team, settings, program, health, meals, scan, devices, family, report]) {
+for (const v of [auth, profile, today, gameday, recovery, checkin, more, schedule, trends, grocery, team, settings, program, health, meals, scan, devices, family, report, journal, progress, mind, tournament, emergency, safesport, budget, season, ask]) {
   Object.assign(actions, v.actions || {});
 }
 
@@ -87,6 +97,7 @@ const TITLES = {
   schedule: "Schedule", trends: "Trends", grocery: "Grocery list", team: "Team", profile: "Profile",
   reminders: "Reminders", account: "Account", program: "My program",
   health: "Health", meals: "Meals", scan: "Scan food", devices: "Devices", family: "Family", report: "Weekly report",
+  journal: "Journal", progress: "Progress", mind: "Mental skills", tournament: "Tournament", emergency: "Emergency card", safesport: "Safe sport", budget: "Season budget", season: "Season review", ask: "Ask",
 };
 
 function switcher() {
@@ -117,11 +128,11 @@ export async function render() {
   }
   if (!VIEWS[name]) { name = isCoach() && !state.profiles.length ? "team" : "today"; state.route.name = name; }
   // Screens that need a player profile.
-  if (!active() && ["health", "meals", "scan", "devices", "report"].includes(name)) { name = isCoach() ? "team" : "today"; state.route.name = name; }
+  if (!active() && ["health", "meals", "scan", "devices", "report", "journal", "progress", "mind", "tournament", "emergency", "budget", "season", "ask"].includes(name)) { name = isCoach() ? "team" : "today"; state.route.name = name; }
 
   const tabs = needsProfile ? [] : tabsFor();
   const tabNames = tabs.map((t) => t[0]);
-  const showSwitch = ["today", "gameday", "recovery", "checkin", "schedule", "trends", "grocery", "program", "health", "meals", "scan", "devices", "report"].includes(name) ||
+  const showSwitch = ["today", "gameday", "recovery", "checkin", "schedule", "trends", "grocery", "program", "health", "meals", "scan", "devices", "report", "journal", "progress", "mind", "tournament", "emergency", "budget", "season", "ask"].includes(name) ||
     (name === "team" && !isCoach());
   const titleText = name === "profile" && state.route.sub === "new"
     ? (isParent() ? "Add an athlete" : "Set up your profile")
@@ -161,6 +172,19 @@ export async function syncReminders() {
   const items = r.data.reminders || [];
   if (isNative()) post({ type: "reminders", profileId: p.id, name: p.identity.fullName, items });
   else scheduleInBrowser(items.filter((x) => x.at.startsWith(todayStr())));
+  if (isNative()) syncWidgets(p).catch(() => {});
+}
+
+/** Countdown + emergency card for the iPhone lock-screen widgets. */
+async function syncWidgets(p) {
+  const [n, x] = await Promise.all([api(`/api/profiles/${p.id}/next?now=${encodeURIComponent(nowStr())}`), api(`/api/profiles/${p.id}/extras?date=${todayStr()}`)]);
+  const next = n.ok ? n.data.next : null;
+  const card = x.ok ? x.data.emergency : null;
+  post({
+    type: "widget",
+    next: next ? { title: `${next.title} ${next.time}`, at: next.at, eatBy: next.eatBy, tip: next.tip } : null,
+    card: card ? { name: card.name.split(" ")[0], line: card.lines.filter((l) => l.urgent).map((l) => `${l.label}: ${l.value}`).join(" ") || "No allergies on file." } : null,
+  });
 }
 
 // ---- global actions ----

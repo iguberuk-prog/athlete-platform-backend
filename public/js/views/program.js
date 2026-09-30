@@ -7,7 +7,8 @@ const list = (items) => `<ul class="list">${items.map((t) => `<li><span class="b
 
 export async function render(el, ctx) {
   const p = ctx.profile;
-  const r = await api(`/api/profiles/${p.id}/program`);
+  const [r, x] = await Promise.all([api(`/api/profiles/${p.id}/program`), api(`/api/profiles/${p.id}/extras`)]);
+  const pos = x.ok ? x.data.position : null;
   if (!ctx.seq()) return;
   if (!r.ok) { el.innerHTML = `<div class="msg err">${esc(errText(r))}</div>`; return; }
   const g = r.data, b = g.band, n = g.numbers, s = g.safety;
@@ -39,6 +40,7 @@ export async function render(el, ctx) {
 
     <div class="card" style="margin-top:14px"><h3>What matters most now</h3>${list(b.focus)}</div>
     <div class="card"><h3>Fuel</h3>${list(b.fuel)}</div>
+    ${pos && pos.tips.length ? `<div class="card"><h3>For a ${esc(pos.position)}</h3>${list(pos.tips)}</div>` : ""}
     <div class="card"><h3>Hydration</h3>${list(b.hydration)}</div>
     <div class="card"><h3>Sleep</h3>${list(b.sleep)}</div>
     <div class="card"><h3>Recovery</h3>${list(b.recovery)}</div>

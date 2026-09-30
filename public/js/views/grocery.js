@@ -5,6 +5,7 @@ import { api, errText } from "../api.js";
 import { active, render as rerender } from "../app.js";
 
 let list = null;
+let aisleMode = storeGet("groceryAisle", false);
 const key = (p, from) => `grocery:${p}:${from}`;
 
 export async function render(el, ctx) {
@@ -32,12 +33,13 @@ export async function render(el, ctx) {
       <div class="note">${c.match} game day${c.match === 1 ? "" : "s"}, ${c.training} practice${c.training === 1 ? "" : "s"}, ${c.recovery} recovery, ${c.rest + c.match_eve} other days.</div>
     </section>
     ${avoid.length ? `<div class="card tight"><span class="small muted">Filtered for: </span><b class="small">${esc(avoid.join(", "))}</b></div>` : ""}
-    ${list.sections.map((s, si) => `
+    <div class="seg"><button class="${aisleMode ? "" : "on"}" data-act="gMode" data-v="0">By type</button><button class="${aisleMode ? "on" : ""}" data-act="gMode" data-v="1">By aisle</button></div>
+    ${(aisleMode ? list.aisles.map((a) => ({ title: a.aisle, items: a.items })) : list.sections).map((s, si) => `
       <div class="card">
         <h3>${esc(s.title)}</h3>
         ${s.items.map((it, ii) => {
-          const id = `${si}-${ii}`, on = !!done[id];
-          return `<label class="gitem ${on ? "done" : ""}"><input type="checkbox" data-act="gToggle" data-id="${id}" ${on ? "checked" : ""}>
+          const id = it.name, on = !!done[id];
+          return `<label class="gitem ${on ? "done" : ""}"><input type="checkbox" data-act="gToggle" data-id="${esc(id)}" ${on ? "checked" : ""}>
             <span class="gn">${esc(it.name)}${it.why ? `<div class="rowsub">${esc(it.why)}</div>` : ""}</span><span class="ga">${esc(it.amount)}</span></label>`;
         }).join("")}
       </div>`).join("")}
@@ -46,6 +48,7 @@ export async function render(el, ctx) {
 }
 
 export const actions = {
+  gMode(btn) { aisleMode = btn.dataset.v === "1"; storeSet("groceryAisle", aisleMode); rerender(); },
   gToggle(input) {
     setTimeout(() => {
       const k = key(active().id, list.from);

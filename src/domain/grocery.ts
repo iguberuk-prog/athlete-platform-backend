@@ -31,6 +31,34 @@ export interface GrocerySection {
   items: GroceryItem[];
 }
 
+export interface AisleSection { aisle: string; items: (GroceryItem & { from: string })[] }
+
+const AISLES: [string, RegExp][] = [
+  ["Produce", /banana|berr|orange|grape|apple|melon|potato|carrot|spinach|greens|broccoli|pepper|cucumber|lemon|avocado|fruit|veg/i],
+  ["Bakery", /bread|bagel|toast|tortilla|roll/i],
+  ["Meat and seafood", /chicken|turkey|beef|salmon|tuna|shrimp|fish|meat/i],
+  ["Refrigerated", /milk|yogurt|cheese|egg|butter|cottage/i],
+  ["Frozen", /frozen|freeze pop|\bice\b/i],
+  ["Drinks", /drink|water|juice|electrolyte|broth|cocoa|\btea\b/i],
+  ["Pantry", /rice|pasta|oat|quinoa|cracker|pretzel|rice cake|bean|lentil|hummus|peanut|almond|sunflower|jam|honey|tofu|soup|nut|seed|granola|sauce/i],
+];
+
+export function aisleFor(name: string): string {
+  for (const [a, re] of AISLES) if (re.test(name)) return a;
+  return "Other";
+}
+
+/** Same items, regrouped by store aisle for a quick shop. */
+export function byAisle(sections: GrocerySection[]): AisleSection[] {
+  const out = new Map<string, AisleSection["items"]>();
+  for (const s of sections) for (const it of s.items) {
+    const a = aisleFor(it.name);
+    out.set(a, [...(out.get(a) || []), { ...it, from: s.title }]);
+  }
+  const order = [...AISLES.map(([a]) => a), "Other"];
+  return order.filter((a) => out.has(a)).map((aisle) => ({ aisle, items: out.get(aisle)! }));
+}
+
 export interface GroceryList {
   profileId: string;
   from: string;
@@ -40,6 +68,7 @@ export interface GroceryList {
   weeklyCarbsG: number;
   weeklyProteinG: number;
   sections: GrocerySection[];
+  aisles: AisleSection[];
   note: string;
 }
 
@@ -175,6 +204,16 @@ export function buildGroceryList(profile: AthleteProfile, from: string, days = 7
     if (ok("eggs")) extras.push({ name: "Extra eggs for protein at breakfast", amount: "1 dozen", why: "Hit protein at every meal" });
   }
 
+  const sections0: GrocerySection[] = [
+      { title: "Carbs (energy)", items: carbItems },
+      { title: "Protein (repair)", items: proteinItems },
+      { title: "Game and practice day", items: gameDay },
+      { title: hotDays && coldDays ? "For this week's weather" : hotDays ? "For this week's heat" : "For this week's cold", items: weather },
+      { title: band.id === "foundations" || band.id === "growth" ? "For growing athletes" : band.id === "veteran" || band.id === "masters" ? "For your age program" : "Extras", items: extras },
+      { title: "Snacks", items: snacks },
+      { title: "Fruit and vegetables", items: produce },
+    ].filter((s) => s.items.length);
+
   return {
     profileId: profile.id,
     from,
@@ -183,15 +222,8 @@ export function buildGroceryList(profile: AthleteProfile, from: string, days = 7
     dayCounts: counts,
     weeklyCarbsG: Math.round(carbs),
     weeklyProteinG: Math.round(protein),
-    sections: [
-      { title: "Carbs (energy)", items: carbItems },
-      { title: "Protein (repair)", items: proteinItems },
-      { title: "Game and practice day", items: gameDay },
-      { title: hotDays && coldDays ? "For this week's weather" : hotDays ? "For this week's heat" : "For this week's cold", items: weather },
-      { title: band.id === "foundations" || band.id === "growth" ? "For growing athletes" : band.id === "veteran" || band.id === "masters" ? "For your age program" : "Extras", items: extras },
-      { title: "Snacks", items: snacks },
-      { title: "Fruit and vegetables", items: produce },
-    ].filter((s) => s.items.length),
+    sections: sections0,
+    aisles: byAisle(sections0),
     note: "Approximate amounts for the athlete only, filtered for their allergies, diet and food preferences. Always read labels.",
   };
 }

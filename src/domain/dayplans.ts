@@ -11,7 +11,7 @@
 import type { AthleteProfile, ScheduledEvent } from "./profile.js";
 import { effectiveAge } from "./profile.js";
 import { parentVoice } from "./ageBands.js";
-import { addDays, eventDate, eventTime, eventsOn, fromMin, routineOf, sortedEvents, to12, toMin, daysBetween } from "./dates.js";
+import { addDays, eventDate, eventTime, eventsOn, fromMin, gameMorning, routineOf, sortedEvents, to12, toMin, daysBetween } from "./dates.js";
 import { examples, safetyContext } from "./foods.js";
 import type { WeatherIndex } from "./weather.js";
 
@@ -150,4 +150,49 @@ export function travelPlans(profile: AthleteProfile, today: string, wx?: Weather
 export function isAwayEvent(profile: AthleteProfile, e: ScheduledEvent): boolean {
   const home = profile.routine?.homeZip;
   return e.type === "travel" || e.type === "tournament" || (!!e.zip && !!home && e.zip !== home);
+}
+
+// ---------------------------------------------------------------------------
+// Next up: countdown for the widget and the Today card
+// ---------------------------------------------------------------------------
+
+export interface NextUp {
+  title: string;
+  type: string;
+  date: string;
+  time: string;
+  /** Start with the event's own UTC offset, for countdown timers. */
+  at: string;
+  minutesAway: number;
+  eatBy?: string;
+  tip: string;
+}
+
+/** `now` = local "YYYY-MM-DDTHH:MM". */
+export function nextUp(profile: AthleteProfile, now: string): NextUp | null {
+  const r = routineOf(profile);
+  const date = now.slice(0, 10), nowMin = toMin(now.slice(11, 16) || "00:00");
+  const c = safetyContext(profile, { gameDay: true });
+  for (const e of sortedEvents(profile)) {
+    if (!(e.type === "match" || e.type === "training" || e.type === "tournament") || e.startTime.length <= 10) continue;
+    const d = eventDate(e);
+    const mins = daysBetween(date, d) * 1440 + toMin(eventTime(e, r.practice)) - nowMin;
+    if (mins < -30) continue;
+    const kickoff = eventTime(e, r.practice);
+    const isGame = e.type !== "training";
+    const title = e.title || (isGame ? "Game" : "Practice");
+    let eatBy: string | undefined;
+    let tip: string;
+    if (mins > 24 * 60) tip = isGame ? "Carb-rich dinner the night before." : "Sleep and fuel like normal.";
+    else if (mins > 210) {
+      const gm = gameMorning(kickoff, r.wake);
+      eatBy = d === date || gm.preMeal > now.slice(11, 16) ? `Eat by ${to12(gm.preMeal)}` : undefined;
+      tip = `Main meal 3 to 4 hours before: ${examples(c, ["pasta", "rice", "bagel", "potato"], 2, "meal_carb")}.`;
+    } else if (mins > 60) { eatBy = "Eat now"; tip = `Small snack now: ${examples(c, ["banana", "bagel", "rice_cakes", "applesauce"], 2, "quick_carb")}. Sip water.`; }
+    else if (mins > 0) tip = "Sip water. No big food now. Warm up.";
+    else tip = "In progress. Water at every break.";
+    const offset = (e.startTime.match(/([+-]\d{2}:\d{2}|Z)$/) || [])[1] || "";
+    return { title, type: e.type, date: d, time: to12(kickoff), at: `${d}T${kickoff}:00${offset}`, minutesAway: Math.max(0, mins), eatBy, tip };
+  }
+  return null;
 }

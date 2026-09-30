@@ -12,12 +12,19 @@
       "bundleIdentifier": "com.guberuk.athleteperformance",
       "buildNumber": "1",
       "supportsTablet": false,
-      "config": { "usesNonExemptEncryption": false },
+      "config": {
+        "usesNonExemptEncryption": false
+      },
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSCameraUsageDescription": "Scan food barcodes and take photos of meals to check them against your food rules.",
         "NSPhotoLibraryUsageDescription": "Choose a photo of a meal to check it against your food rules.",
         "UIBackgroundModes": []
+      },
+      "entitlements": {
+        "com.apple.security.application-groups": [
+          "group.com.guberuk.athleteperformance"
+        ]
       }
     },
     "android": {
@@ -53,7 +60,8 @@
           "NSHealthUpdateUsageDescription": "Athlete Performance does not write to Apple Health.",
           "background": false
         }
-      ]
+      ],
+      "@bacons/apple-targets"
     ],
     "extra": {
       "appUrl": "https://peaceful-paletas-0a1cb4.netlify.app"

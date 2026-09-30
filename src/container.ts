@@ -33,6 +33,8 @@ import { ReportService } from "./services/reportService.js";
 import { IntegrationService } from "./services/integrationService.js";
 import { PlateService } from "./services/plateService.js";
 import { ResendMailer } from "./services/notifier.js";
+import { PlayerService } from "./services/playerService.js";
+import { AskService } from "./services/askService.js";
 import { ProfileService } from "./services/profileService.js";
 import { CheckInService } from "./services/checkinService.js";
 import { PlanService } from "./services/planService.js";
@@ -55,6 +57,8 @@ interface Services {
   reports: ReportService;
   integrations: IntegrationService;
   plates: PlateService;
+  player: PlayerService;
+  ask: AskService;
 }
 
 function wire(p: AthleteProfileRepository, c: CheckInRepository, t: TeamRepository, r: RecordRepository): Services {
@@ -79,6 +83,8 @@ function wire(p: AthleteProfileRepository, c: CheckInRepository, t: TeamReposito
     reports: new ReportService(p, c, family, r, mailer),
     integrations: new IntegrationService(p, c, family, r),
     plates: new PlateService(p, family, r),
+    player: new PlayerService(p, c, family, r),
+    ask: new AskService(p, c, family, r, weather),
   };
 }
 
@@ -144,3 +150,5 @@ export const getProductService = () => getServices().products;
 export const getReportService = () => getServices().reports;
 export const getIntegrationService = () => getServices().integrations;
 export const getPlateService = () => getServices().plates;
+export const getPlayerService = () => getServices().player;
+export const getAskService = () => getServices().ask;

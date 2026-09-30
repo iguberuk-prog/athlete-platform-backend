@@ -469,6 +469,15 @@ export function validateProfileInput(input: ProfileInput): ValidationResult {
   validateAdvanced(errors, input);
   validateSchedule(errors, input);
   validateRoutine(errors, input);
+  if (input.fun !== undefined) {
+    const f = input.fun as unknown as Record<string, unknown>;
+    if (!f || typeof f !== "object") errors.push({ path: "fun", message: "must be an object" });
+    else {
+      if (f.buddyName !== undefined && !(isString(f.buddyName) && f.buddyName.trim().length >= 1 && f.buddyName.length <= 20)) errors.push({ path: "fun.buddyName", message: "must be 1-20 characters" });
+      if (f.buddyColor !== undefined && !isString(f.buddyColor)) errors.push({ path: "fun.buddyColor", message: "must be text" });
+      if (f.genres !== undefined) arrayCheck(errors, "fun.genres", f.genres, false, (v, i) => { if (!isString(v) || v.length > 20) errors.push({ path: `fun.genres[${i}]`, message: "must be short text" }); });
+    }
+  }
   if (input.notifications !== undefined) {
     const n = input.notifications as unknown as Record<string, unknown>;
     if (!n || typeof n !== "object" || (n.weeklyReport !== undefined && !isBool(n.weeklyReport)))

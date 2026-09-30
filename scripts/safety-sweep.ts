@@ -19,6 +19,7 @@ import { tournamentPlans } from "../src/domain/tournament.js";
 import { nextUp } from "../src/domain/dayplans.js";
 import { positionFuel } from "../src/domain/daily.js";
 import { mentalSkills } from "../src/domain/mental.js";
+import { gameDayStory, carQuiz, familyCookNight } from "../src/domain/fun.js";
 import type { AthleteProfile, ProfileInput } from "../src/domain/profile.js";
 import { buildMatchDayPlan } from "../src/domain/plan.js";
 import { buildGameDayTimeline } from "../src/domain/timeline.js";
@@ -119,6 +120,9 @@ function allText(p: AthleteProfile, withProgram = true): string {
   out.push(teamMenu([p]), teamMenu([p], { gameDay: true }));
   const tourney = { ...p, schedule: { events: [0, 1, 2].map((i) => ({ type: "match" as const, startTime: `${addDays(START, 4 + (i > 1 ? 1 : 0))}T${["09:00", "13:30", "10:00"][i]}:00-04:00`, importance: "high" as const })) } } as AthleteProfile;
   out.push(tournamentPlans(tourney, START), nextUp(tourney, `${addDays(START, 4)}T06:00`), nextUp(tourney, `${addDays(START, 4)}T08:00`), nextUp(tourney, `${addDays(START, 3)}T12:00`), positionFuel(p), mentalSkills(p));
+  // Fun: stories, quizzes and cook nights must only name safe foods.
+  out.push(gameDayStory(p, nextUp(tourney, `${addDays(START, 4)}T06:00`), "Blaze"), gameDayStory(p, nextUp(tourney, `${addDays(START, 3)}T12:00`), "Blaze"));
+  for (let s = 0; s < 6; s++) out.push(carQuiz(p, s), familyCookNight([p], s));
   // The program's safety summary and "avoid" lists intentionally name excluded foods; scan the rest.
   if (withProgram) out.push(buildProgram(p));
   return JSON.stringify(out, noAvoidLists);

@@ -37,6 +37,7 @@ export async function render(el, ctx) {
     ${head}
     ${install}
     <div class="sectionTitle">Plan</div>
+    ${p ? tile("#/fun", "star", "Fun", p.features?.fuelBuddy ? "Your fuel buddy, stickers, stories and games" : p.features?.playlist ? "Playlist, season wrapped, quiz and cook night" : "Car quiz, cook night and grocery hunt") : ""}
     ${p ? tile("#/ask", "chat", "Ask", "Questions answered with your food rules") : ""}
     ${p ? tile("#/scan", "scan", "Scan food", "Is it safe, and is now a good time?") : ""}
     ${p ? tile("#/journal", "book", "Journal and stats", "30-second post-game reflection") : ""}

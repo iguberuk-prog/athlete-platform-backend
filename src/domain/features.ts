@@ -19,7 +19,9 @@ export type FeatureId =
   | "cycle" | "breathing" | "burnoutCheck" | "crisisLine" | "warmup" | "schoolDay" | "travel"
   | "recipes" | "mealPlan" | "eatingOut" | "snapPlate" | "appleHealth" | "garmin" | "whoop" | "oura"
   | "bodyWeight" | "sessionLoad" | "hrv" | "overuseGuard" | "heatAcclimatization"
-  | "fuelingAlerts" | "weeklyParentReport" | "calendarImport" | "familyLink";
+  | "fuelingAlerts" | "weeklyParentReport" | "calendarImport" | "familyLink"
+  | "fuelBuddy" | "stickerBook" | "gameStory" | "playlist" | "kitchenChallenge" | "streakFreeze" | "seasonWrapped"
+  | "cookNight" | "groceryHunt" | "carQuiz";
 
 interface Rule { min?: number; max?: number; female?: boolean; why: string }
 
@@ -54,6 +56,16 @@ const RULES: Record<FeatureId, Rule> = {
   weeklyParentReport: { max: 17, why: "The weekly parent report is for players under 18." },
   calendarImport: { why: "" },
   familyLink: { why: "" },
+  fuelBuddy: { max: 12, why: "The fuel buddy is for players 12 and under." },
+  stickerBook: { max: 12, why: "The sticker book is for players 12 and under. Older players earn badges." },
+  gameStory: { max: 12, why: "Game-day stories are for players 12 and under." },
+  playlist: { min: 13, why: "Spotify is for ages 13 and up." },
+  kitchenChallenge: { min: 13, why: "Kitchen challenges are for players 13 and up." },
+  streakFreeze: { min: 13, why: "" },
+  seasonWrapped: { min: 13, why: "Younger players get the sticker book and season review." },
+  cookNight: { why: "" },
+  groceryHunt: { why: "" },
+  carQuiz: { why: "" },
 };
 
 export interface FeatureSet {

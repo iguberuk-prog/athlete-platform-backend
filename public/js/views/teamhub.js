@@ -1,4 +1,4 @@
-// Team hub: announcements, challenges, homework, sign-ups, team calendar.
+// Team hub: announcements, challenges, kitchen challenge, homework, sign-ups, team calendar.
 // Rendered inside the coach roster, and as its own screen for families (#/teamhub/:teamId).
 
 import { $, esc, todayStr, addDays, niceDate, to12, msg, toast } from "../ui.js";
@@ -33,6 +33,20 @@ export async function renderHub(el, teamId) {
         <label>Type<select class="input" id="chType">${Object.entries(CH).map(([k, t]) => `<option value="${k}">${t}</option>`).join("")}</select></label>
         <label>Days<select class="input" id="chDays"><option value="7">1 week</option><option value="14">2 weeks</option><option value="28">4 weeks</option></select></label>
         <button class="btn ghost" style="grid-column:1/-1">Start a challenge today</button></form>` : ""}
+    </div>
+
+
+    <div class="card"><h3>Kitchen challenge</h3>
+      ${(h.kitchen || []).map((k) => `<div class="chal">
+        <div class="rowtitle">${esc(k.title)} ${k.open ? `<span class="pill ready"><span class="dot"></span>Open</span>` : ""}</div>
+        <div class="rowsub">${k.open ? "Post by" : "Ended"} ${esc(niceDate(k.end))} · ${k.entries} plate${k.entries === 1 ? "" : "s"}${k.leader ? ` · leading: ${esc(k.leader)}` : ""}</div>
+        <button class="btn ghost sm" data-act="kitOpen" data-id="${k.id}">See plates and vote</button>
+        <div id="kit-${k.id}"></div></div>`).join("") || `<p class="sub">No kitchen challenge right now.</p>`}
+      ${coach ? `<form data-submit="kitCreate" class="grid2">
+        <input class="input" id="kitTitle" maxlength="60" placeholder="Dish, e.g. Chicken rice bowl" style="grid-column:1/-1">
+        <label>Ends<input class="input" id="kitEnd" type="date" value="${addDays(todayStr(), 7)}"></label>
+        <button class="btn ghost" style="align-self:end">Start</button></form>
+        <p class="disc">For players 13 and up. Everyone cooks the same dish, posts a photo of the plate, and the team votes.</p>` : ""}
     </div>
 
     <div class="card"><h3>Skills homework</h3>
@@ -82,6 +96,48 @@ const again = () => rerender();
 const tid = () => current?.team.id;
 
 export const actions = {
+  async kitCreate() {
+    const r = await api(`/api/teams/${tid()}/kitchen`, { method: "POST", body: { title: $("#kitTitle").value, end: $("#kitEnd").value } });
+    if (!r.ok) return toast(errText(r)); toast("Kitchen challenge started and announced"); again();
+  },
+  async kitOpen(btn) {
+    const box = $(`#kit-${btn.dataset.id}`);
+    const r = await api(`/api/teams/${tid()}/kitchen/${btn.dataset.id}`);
+    if (!r.ok) { box.innerHTML = msg("err", errText(r)); return; }
+    const d = r.data, p = active();
+    const canEnter = d.open && d.role !== "coach" && p?.features?.kitchenChallenge;
+    box.innerHTML = `
+      ${d.entries.length ? `<div class="kplates">${d.entries.map((e) => `<figure class="kplate"><img src="${esc(e.photo)}" alt="${esc(e.name)}'s plate" loading="lazy">
+        <figcaption><b>${esc(e.name)}</b>${e.caption ? `<div class="small">${esc(e.caption)}</div>` : ""}
+          <div class="vrow"><span>${e.votes} vote${e.votes === 1 ? "" : "s"}</span>
+          ${e.mine ? (d.role === "coach" ? "" : `<button class="btn link sm" data-act="kitRemove" data-kit="${d.challenge.id}" data-id="${esc(e.id)}">Remove</button>`) : d.open ? `<button class="btn ${e.myVote ? "primary" : "ghost"} sm" data-act="kitVote" data-kit="${d.challenge.id}" data-id="${esc(e.id)}">${e.myVote ? "Voted" : "Vote"}</button>` : ""}
+          ${d.role === "coach" ? `<button class="btn link sm" data-act="kitRemove" data-kit="${d.challenge.id}" data-id="${esc(e.id)}">Remove</button>` : ""}</div></figcaption></figure>`).join("")}</div>` : `<p class="sub">No plates yet.</p>`}
+      ${canEnter ? `<form data-submit="kitEnter" data-kit="${d.challenge.id}" class="kitForm">
+        <input type="file" id="kitPhoto" accept="image/*" capture="environment" class="input">
+        <input class="input" id="kitCaption" maxlength="120" placeholder="Caption (optional)">
+        <button class="btn primary block">Post ${esc(p.identity.fullName.split(" ")[0])}'s plate</button></form>` : ""}
+      ${d.open && d.role !== "coach" && p && !p.features?.kitchenChallenge ? `<p class="disc">Posting is for players 13 and up.</p>` : ""}`;
+  },
+  async kitEnter(form) {
+    const file = $("#kitPhoto").files[0];
+    if (!file) return toast("Add a photo of your plate.");
+    const photo = await shrink(file);
+    const r = await api(`/api/teams/${tid()}/kitchen/${form.dataset.kit}/entries`, { method: "POST", body: { profileId: active().id, photo, caption: $("#kitCaption").value || undefined } });
+    if (!r.ok) return toast(errText(r));
+    toast("Plate posted!");
+    actions.kitOpen({ dataset: { id: form.dataset.kit } });
+  },
+  async kitVote(btn) {
+    const r = await api(`/api/teams/${tid()}/kitchen/${btn.dataset.kit}/vote`, { method: "POST", body: { entryId: btn.dataset.id } });
+    if (!r.ok) return toast(errText(r));
+    actions.kitOpen({ dataset: { id: btn.dataset.kit } });
+  },
+  async kitRemove(btn) {
+    if (!confirm("Remove this plate?")) return;
+    const r = await api(`/api/teams/${tid()}/kitchen/${btn.dataset.kit}/entries?entry=${encodeURIComponent(btn.dataset.id)}`, { method: "DELETE" });
+    if (!r.ok) return toast(errText(r));
+    actions.kitOpen({ dataset: { id: btn.dataset.kit } });
+  },
   async hubAnnounce() {
     const r = await api(`/api/teams/${tid()}/announce`, { method: "POST", body: { text: $("#annText").value } });
     if (!r.ok) return toast(errText(r)); again();
@@ -122,3 +178,26 @@ export const actions = {
     toast(r.data.error ? `Saved, but: ${r.data.error}` : `${r.data.count} events sent to every player`); again();
   },
 };
+
+/** Resize a photo to a JPEG data URL small enough for the server (under ~250 KB). */
+function shrink(file) {
+  return new Promise((res, rej) => {
+    const img = new Image();
+    img.onerror = () => rej(new Error("That photo couldn't be read."));
+    img.onload = () => {
+      let side = 720, q = 0.72, out = "";
+      for (let i = 0; i < 5; i++) {
+        const s = Math.min(1, side / Math.max(img.width, img.height));
+        const c = document.createElement("canvas");
+        c.width = Math.round(img.width * s); c.height = Math.round(img.height * s);
+        c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+        out = c.toDataURL("image/jpeg", q);
+        if (out.length < 340_000) break;
+        side = Math.round(side * 0.8); q -= 0.08;
+      }
+      URL.revokeObjectURL(img.src);
+      res(out);
+    };
+    img.src = URL.createObjectURL(file);
+  });
+}

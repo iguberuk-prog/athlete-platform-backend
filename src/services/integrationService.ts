@@ -263,6 +263,7 @@ export class IntegrationService {
     let n = 0;
     for (const rec of await this.records.listByKind<IntegrationData>("integration", 500)) {
       if (Date.now() - t0 > budgetMs) break;
+      if (rec.data.provider !== "whoop" && rec.data.provider !== "oura") continue;
       const res = await this.sync(rec.ownerId, rec.data.profileId, rec.data.provider, 3).catch(() => null);
       if (res?.ok) n++;
     }

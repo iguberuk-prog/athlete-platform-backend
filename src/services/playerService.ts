@@ -78,7 +78,7 @@ export class PlayerService {
     const r = await this.load(userId, id);
     if (!r) return null;
     const [logs, cis, hw] = await Promise.all([this.logs(id), this.checkins.listByProfile(r.owner, id, 400), this.records.listByKey<{ date: string }>("homework_done", id)]);
-    return buildProgress(r.p, { checkins: cis, reflectionDates: logs.filter((l) => l.wentWell || l.workOn || l.rating).map((l) => l.date), homeworkDates: hw.map((h) => h.data.date) }, today);
+    return buildProgress(r.p, { checkins: cis, reflectionDates: logs.filter((l) => l.wentWell || l.workOn || l.rating).map((l) => l.date), homeworkDates: hw.map((h) => h.data.date) }, today, { freezes: featuresFor(r.p).on.streakFreeze });
   }
 
   async risk(userId: string, id: string, today: string) {

@@ -358,6 +358,8 @@ export interface AthleteProfile {
   schedule?: Schedule;
   routine?: Routine;
   notifications?: { weeklyReport?: boolean };
+  /** Fun settings: fuel buddy name and color, playlist genres. */
+  fun?: { buddyName?: string; buddyColor?: string; genres?: string[] };
 
   createdAt: string;
   updatedAt: string;

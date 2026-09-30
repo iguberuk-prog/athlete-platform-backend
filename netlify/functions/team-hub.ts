@@ -42,6 +42,11 @@ export default async (req: Request, context: Context): Promise<Response> => {
       case "POST /signups": r = await svc.createSignup(user.id, teamId, { ...b, slots: Number(b.slots) } as any); break;
       case "POST /signups/:id": r = await svc.takeSlot(user.id, teamId, item, b as any); break;
       case "PUT /feed": r = await svc.setFeed(user.id, teamId, b.url ? String(b.url) : null); break;
+      case "POST /kitchen": r = await svc.createKitchen(user.id, teamId, b as any); break;
+      case "GET /kitchen/:id": r = await svc.kitchenEntries(user.id, teamId, item); break;
+      case "POST /kitchen/:id/entries": r = await svc.enterKitchen(user.id, teamId, item, b as any); break;
+      case "POST /kitchen/:id/vote": r = await svc.voteKitchen(user.id, teamId, item, String(b.entryId || "")); break;
+      case "DELETE /kitchen/:id/entries": r = await svc.removeKitchenEntry(user.id, teamId, item, String(url.searchParams.get("entry") || "")); break;
       default: return json({ error: "method_not_allowed" }, 405);
     }
     return r.ok ? json(r.value) : json({ error: r.code, message: r.message }, status(r.code));
@@ -56,5 +61,6 @@ export const config: Config = {
     "/api/teams/:teamId/challenges", "/api/teams/:teamId/challenges/:itemId/winners",
     "/api/teams/:teamId/homework", "/api/teams/:teamId/homework/:itemId/done",
     "/api/teams/:teamId/signups", "/api/teams/:teamId/signups/:itemId", "/api/teams/:teamId/feed",
+    "/api/teams/:teamId/kitchen", "/api/teams/:teamId/kitchen/:itemId", "/api/teams/:teamId/kitchen/:itemId/entries", "/api/teams/:teamId/kitchen/:itemId/vote",
   ],
 };

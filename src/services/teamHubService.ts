@@ -18,6 +18,7 @@ import type { AthleteProfile, ProfileInput, ScheduledEvent } from "../domain/pro
 import { CHALLENGE_TYPES, challengeBoard, firstAndInitial, type Challenge, type ChallengeType } from "../domain/club.js";
 import { sleepHoursFor } from "../domain/ageBands.js";
 import { shortDate } from "../domain/dates.js";
+import { featuresFor } from "../domain/features.js";
 import { effectiveAge } from "../domain/profile.js";
 import { teamMenu } from "../domain/teamMeal.js";
 import { parseIcs, toScheduled } from "../domain/ics.js";
@@ -35,6 +36,8 @@ interface Homework { id: string; teamId: string; title: string; description?: st
 interface HomeworkDone { homeworkId: string; teamId: string; profileId: string; date: string; note?: string; videoUrl?: string }
 interface Signup { id: string; teamId: string; kind: "carpool" | "snack" | "volunteer"; title: string; date: string; time?: string; slots: number; takenBy: { userId: string; name: string; note?: string }[]; createdAt: string }
 interface Announce { text: string; by: string; createdAt: string }
+interface Kitchen { id: string; teamId: string; title: string; recipe?: string; end: string; createdAt: string }
+interface KitchenEntry { profileId: string; name: string; photo: string; caption?: string; votes: string[]; createdAt: string }
 
 const safeUrl = (u: unknown) => (typeof u === "string" && /^https:\/\/[^\s]{4,500}$/.test(u) ? u : undefined);
 
@@ -72,6 +75,12 @@ export class TeamHubService {
     const a = await this.access(userId, teamId);
     if (!a) return { ok: false, code: "not_found" };
     const team = (await this.teams.getById(teamId))!;
+    const kitchens = (await this.records.listByKey<Kitchen>("kitchen", teamId)).map((k) => k.data).filter((k) => k.end >= addDaysStr(today, -7));
+    const kitchen = await Promise.all(kitchens.map(async (k) => {
+      const es = (await this.records.listByKey<KitchenEntry>("kitchen_entry", k.id)).map((e) => e.data);
+      const lead = [...es].sort((x, y) => y.votes.length - x.votes.length)[0];
+      return { ...k, entries: es.length, leader: lead && lead.votes.length ? lead.name : null, open: k.end >= today };
+    }));
     const [ann, chs, hws, sus, feed] = await Promise.all([
       this.records.listByKey<Announce>("announce", teamId), this.records.listByKey<Challenge>("challenge", teamId),
       this.records.listByKey<Homework>("homework", teamId), this.records.listByKey<Signup>("signup", teamId),
@@ -100,7 +109,7 @@ export class TeamHubService {
         team: { id: team.id, name: team.name, code: a.role === "coach" ? team.code : undefined, players: roster.length },
         role: a.role,
         announcements: ann.map((x) => ({ id: x.id, ...x.data })).sort((x, y) => y.createdAt.localeCompare(x.createdAt)).slice(0, 20),
-        challenges, homework, signups,
+        challenges, homework, signups, kitchen,
         snackIdeas: { halftime: snack.sections.find((s) => s.title === "Half-time snacks")?.forEveryone || [], after: snack.sections.find((s) => s.title === "After-game snacks")?.forEveryone || [], tips: snack.tips },
         feed: a.role === "coach" ? feed?.data || null : feed ? { connected: true } : null,
       },
@@ -210,6 +219,71 @@ export class TeamHubService {
     }
     await this.records.put({ id: s.id, kind: "signup", key: teamId, ownerId: rec.ownerId, data: s });
     return { ok: true, value: s };
+  }
+
+  // --- kitchen challenge (13+): cook the same recipe, post a photo, team votes ---------
+
+  async createKitchen(userId: string, teamId: string, b: { title?: string; recipe?: string; end: string }): Promise<HResult<Kitchen>> {
+    const a = await this.access(userId, teamId);
+    if (!a) return { ok: false, code: "forbidden" };
+    if (!isDay(b.end)) return { ok: false, code: "invalid", message: "Pick an end date." };
+    const title = clean(b.title, 60) || clean(b.recipe, 60);
+    if (!title) return { ok: false, code: "invalid", message: "Name the dish everyone will cook." };
+    const k: Kitchen = { id: randomUUID(), teamId, title, recipe: clean(b.recipe, 80) || undefined, end: b.end, createdAt: new Date().toISOString() };
+    await this.records.put({ id: k.id, kind: "kitchen", key: teamId, ownerId: userId, data: k });
+    await this.records.put<Announce>({ id: randomUUID(), kind: "announce", key: teamId, ownerId: userId, data: { text: `Kitchen challenge: cook "${k.title}" by ${shortDate(k.end)}, post a photo of your plate, and vote for the best one.`, by: a.role === "coach" ? "Coach" : "Team", createdAt: new Date().toISOString() } });
+    return { ok: true, value: k };
+  }
+
+  async enterKitchen(userId: string, teamId: string, kid: string, b: { profileId: string; photo: string; caption?: string }): Promise<HResult<true>> {
+    const a = await this.access(userId, teamId);
+    if (!a || !a.myPlayers.includes(b.profileId)) return { ok: false, code: "forbidden" };
+    const k = await this.records.get<Kitchen>("kitchen", kid);
+    if (!k || k.key !== teamId) return { ok: false, code: "not_found" };
+    const owner = (await this.family.ownerFor(userId, b.profileId))!;
+    const p = await this.profiles.getById(owner, b.profileId);
+    if (!p || !featuresFor(p).on.kitchenChallenge) return { ok: false, code: "invalid", message: "Kitchen challenges are for players 13 and up." };
+    if (!/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(b.photo || "") || b.photo.length > 350_000) return { ok: false, code: "invalid", message: "Add a photo of your plate (under about 250 KB)." };
+    const prev = await this.records.get<KitchenEntry>("kitchen_entry", `${kid}:${b.profileId}`);
+    await this.records.put<KitchenEntry>({ id: `${kid}:${b.profileId}`, kind: "kitchen_entry", key: kid, ownerId: owner, data: { profileId: b.profileId, name: firstAndInitial(p.identity.fullName), photo: b.photo, caption: clean(b.caption, 120) || undefined, votes: prev?.data.votes || [], createdAt: new Date().toISOString() } });
+    return { ok: true, value: true };
+  }
+
+  async kitchenEntries(userId: string, teamId: string, kid: string): Promise<HResult<unknown>> {
+    const a = await this.access(userId, teamId);
+    if (!a) return { ok: false, code: "not_found" };
+    const k = await this.records.get<Kitchen>("kitchen", kid);
+    if (!k || k.key !== teamId) return { ok: false, code: "not_found" };
+    const entries = (await this.records.listByKey<KitchenEntry>("kitchen_entry", kid)).map((e) => ({
+      id: e.id, name: e.data.name, photo: e.data.photo, caption: e.data.caption, votes: e.data.votes.length,
+      mine: a.myPlayers.includes(e.data.profileId), myVote: e.data.votes.includes(userId),
+    })).sort((x, y) => y.votes - x.votes);
+    return { ok: true, value: { challenge: k.data, entries, role: a.role, open: k.data.end >= new Date().toISOString().slice(0, 10) } };
+  }
+
+  /** One vote per person per challenge; you can move it, but not vote for your own player. */
+  async voteKitchen(userId: string, teamId: string, kid: string, entryId: string): Promise<HResult<true>> {
+    const a = await this.access(userId, teamId);
+    if (!a) return { ok: false, code: "forbidden" };
+    const entries = await this.records.listByKey<KitchenEntry>("kitchen_entry", kid);
+    const target = entries.find((e) => e.id === entryId);
+    if (!target) return { ok: false, code: "not_found" };
+    if (a.myPlayers.includes(target.data.profileId)) return { ok: false, code: "invalid", message: "Vote for a teammate's plate." };
+    for (const e of entries) {
+      const has = e.data.votes.includes(userId);
+      const want = e.id === entryId;
+      if (has !== want) await this.records.put<KitchenEntry>({ id: e.id, kind: "kitchen_entry", key: kid, ownerId: e.ownerId, data: { ...e.data, votes: want ? [...e.data.votes, userId] : e.data.votes.filter((v) => v !== userId) } });
+    }
+    return { ok: true, value: true };
+  }
+
+  async removeKitchenEntry(userId: string, teamId: string, kid: string, entryId: string): Promise<HResult<true>> {
+    const a = await this.access(userId, teamId);
+    const e = await this.records.get<KitchenEntry>("kitchen_entry", entryId);
+    if (!a || !e || e.key !== kid) return { ok: false, code: "not_found" };
+    if (a.role !== "coach" && !a.myPlayers.includes(e.data.profileId)) return { ok: false, code: "forbidden" };
+    await this.records.delete("kitchen_entry", entryId);
+    return { ok: true, value: true };
   }
 
   // --- team calendar (coach adds once, every player gets it) ---------------------------------

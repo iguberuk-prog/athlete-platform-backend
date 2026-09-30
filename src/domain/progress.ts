@@ -10,7 +10,7 @@ import { effectiveAge } from "./profile.js";
 import { sleepHoursFor } from "./ageBands.js";
 import { addDays } from "./dates.js";
 
-export interface Streak { id: string; label: string; current: number; best: number; unit: string; doneToday: boolean; tip: string }
+export interface Streak { id: string; label: string; current: number; best: number; unit: string; doneToday: boolean; tip: string; frozen?: string[] }
 export interface Badge { id: string; name: string; detail: string; earned: boolean; earnedOn?: string; progress: number; goal: number; icon: string }
 
 export interface Progress {
@@ -20,22 +20,40 @@ export interface Progress {
   /** Something to celebrate right now (for a toast). */
   newest?: string;
   points: number;
+  /** Streak freeze: one missed day a month doesn't break the check-in streak (13+). */
+  freeze?: { available: number; usedOn: string[] };
 }
 
 /** Days in a row ending today (or yesterday, so a streak isn't "lost" before today's check-in). */
-function runs(days: Set<string>, today: string): { current: number; best: number; doneToday: boolean } {
+/**
+ * Days in a row. With `freezes`, one missed day per calendar month is
+ * bridged (a streak freeze), so a sick day doesn't wipe out a long streak.
+ * A frozen day keeps the streak alive but doesn't add to the count.
+ */
+function runs(days: Set<string>, today: string, freezes = false): { current: number; best: number; doneToday: boolean; frozen: string[] } {
   const sorted = [...days].sort();
+  const used = new Set<string>(); // months with a freeze spent
+  const frozen: string[] = [];
   let best = 0, run = 0, prev = "";
   for (const d of sorted) {
-    run = prev && addDays(prev, 1) === d ? run + 1 : 1;
+    if (prev && addDays(prev, 1) === d) run++;
+    else if (freezes && prev && addDays(prev, 2) === d && !used.has(addDays(prev, 1).slice(0, 7))) {
+      used.add(addDays(prev, 1).slice(0, 7)); frozen.push(addDays(prev, 1)); run++;
+    } else run = 1;
     best = Math.max(best, run);
     prev = d;
   }
   const doneToday = days.has(today);
   let current = 0;
   let d = doneToday ? today : addDays(today, -1);
-  while (days.has(d)) { current++; d = addDays(d, -1); }
-  return { current, best, doneToday };
+  const usedBack = new Set<string>();
+  for (;;) {
+    if (days.has(d)) { current++; d = addDays(d, -1); continue; }
+    const m = d.slice(0, 7);
+    if (freezes && current > 0 && days.has(addDays(d, -1)) && !usedBack.has(m)) { usedBack.add(m); d = addDays(d, -1); continue; }
+    break;
+  }
+  return { current, best: Math.max(best, current), doneToday, frozen };
 }
 
 export interface ProgressInputs {
@@ -46,7 +64,7 @@ export interface ProgressInputs {
   homeworkDates?: string[];
 }
 
-export function buildProgress(profile: AthleteProfile, inp: ProgressInputs, today: string): Progress {
+export function buildProgress(profile: AthleteProfile, inp: ProgressInputs, today: string, opts: { freezes?: boolean } = {}): Progress {
   const age = effectiveAge(profile.identity);
   const [sleepMin] = sleepHoursFor(age);
   const cis = inp.checkins.filter((c) => c.date <= today);
@@ -65,7 +83,9 @@ export function buildProgress(profile: AthleteProfile, inp: ProgressInputs, toda
   let wkBest = 0, wkRun = 0, wkPrev = "";
   for (const w of [...goodWeeks].sort()) { wkRun = wkPrev && addDays(wkPrev, 7) === w ? wkRun + 1 : 1; wkBest = Math.max(wkBest, wkRun); wkPrev = w; }
 
-  const c = runs(checkDays, today), s = runs(sleepDays, today), h = runs(hydDays, today);
+  const fz = !!opts.freezes;
+  const c = runs(checkDays, today, fz), s = runs(sleepDays, today, fz), h = runs(hydDays, today, fz);
+  const monthFrozen = c.frozen.some((d) => d.slice(0, 7) === today.slice(0, 7));
   const streaks: Streak[] = [
     { id: "checkin", label: "Check-in streak", ...c, unit: "days", tip: "Check in every day, even rest days." },
     { id: "sleep", label: "Sleep on target", ...s, unit: "nights", tip: `${sleepMin}+ hours a night.` },
@@ -101,5 +121,6 @@ export function buildProgress(profile: AthleteProfile, inp: ProgressInputs, toda
   const earned = badges.filter((b) => b.earned);
   const newest = earned.filter((b) => b.earnedOn === today).map((b) => b.name)[0];
   const points = allCheck.length * 10 + warm.length * 5 + refl.length * 15 + s.best * 2 + h.best * 2 + hw.length * 10;
-  return { streaks, badges, earnedCount: earned.length, newest, points };
+  return { streaks: streaks.map(({ frozen: _f, ...x }: any) => x), badges, earnedCount: earned.length, newest, points,
+    freeze: fz ? { available: monthFrozen ? 0 : 1, usedOn: c.frozen.slice(-3) } : undefined };
 }

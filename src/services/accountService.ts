@@ -28,7 +28,7 @@ export class AccountService {
     for (const p of list) {
       checkins += await this.checkins.deleteByProfile(ownerId, p.id);
       // Links, invites and device connections for this profile go too.
-      if (this.records) for (const k of ["link", "invite", "integration", "gamelog", "expense", "budgetplan", "homework_done"]) await this.records.deleteByKey(k, p.id);
+      if (this.records) for (const k of ["link", "invite", "integration", "gamelog", "expense", "budgetplan", "homework_done", "fun_event"]) await this.records.deleteByKey(k, p.id);
       await this.profiles.delete(ownerId, p.id);
     }
     // Everything this account holds: its links to other profiles, usage counters, etc.

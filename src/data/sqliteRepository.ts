@@ -84,6 +84,16 @@ export class SqliteAthleteProfileRepository implements AthleteProfileRepository 
     return row ? this.toProfile(row) : null;
   }
 
+  async findManyByIds(ids: string[]): Promise<AthleteProfile[]> {
+    const uniq = [...new Set(ids)];
+    if (!uniq.length) return [];
+    const placeholders = uniq.map(() => "?").join(",");
+    const rows = this.db
+      .prepare(`SELECT * FROM athlete_profiles WHERE id IN (${placeholders})`)
+      .all(...uniq) as ProfileRow[];
+    return rows.map((r) => this.toProfile(r));
+  }
+
   async listByOwner(ownerId: string): Promise<AthleteProfile[]> {
     const rows = this.db
       .prepare(`SELECT * FROM athlete_profiles WHERE owner_id = ? ORDER BY created_at`)
@@ -188,6 +198,23 @@ export class SqliteCheckInRepository implements CheckInRepository {
       )
       .all(ownerId, profileId, limit) as CheckInRow[];
     return rows.map((r) => this.toCheckIn(r));
+  }
+
+  async listRecentForProfiles(profileIds: string[], perProfile = 40): Promise<Map<string, DailyCheckIn[]>> {
+    const byProfile = new Map<string, DailyCheckIn[]>();
+    const uniq = [...new Set(profileIds)];
+    if (!uniq.length) return byProfile;
+    const placeholders = uniq.map(() => "?").join(",");
+    const rows = this.db
+      .prepare(`SELECT * FROM daily_checkins WHERE profile_id IN (${placeholders}) ORDER BY date DESC`)
+      .all(...uniq) as CheckInRow[];
+    for (const r of rows) {
+      const ci = this.toCheckIn(r);
+      const list = byProfile.get(ci.profileId) || [];
+      if (list.length < perProfile) list.push(ci);
+      byProfile.set(ci.profileId, list);
+    }
+    return byProfile;
   }
 
   async getByDate(

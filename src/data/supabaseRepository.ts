@@ -35,6 +35,28 @@ const CHECKINS = "daily_checkins";
 const TEAMS = "teams";
 const MEMBERS = "team_members";
 
+/** PostgREST caps unbounded selects (commonly 1000 rows). Page past it. */
+const PAGE = 1000;
+async function fetchAllRows(
+  run: (from: number, to: number) => PromiseLike<{ data: unknown[] | null; error: unknown }>,
+  max = Number.MAX_SAFE_INTEGER,
+): Promise<unknown[]> {
+  const out: unknown[] = [];
+  for (let from = 0; out.length < max; from += PAGE) {
+    const { data, error } = await run(from, from + PAGE - 1);
+    if (error) throw error;
+    const rows = data ?? [];
+    out.push(...rows);
+    if (rows.length < PAGE) break;
+  }
+  return max < out.length ? out.slice(0, max) : out;
+}
+function chunk<T>(arr: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
+}
+
 function makeClient(url: string, serviceKey: string): SupabaseClient {
   if (!url || !serviceKey) {
     throw new Error(
@@ -94,6 +116,17 @@ export class SupabaseAthleteProfileRepository implements AthleteProfileRepositor
     return data ? (data.data as AthleteProfile) : null;
   }
 
+  async findManyByIds(ids: string[]): Promise<AthleteProfile[]> {
+    if (!ids.length) return [];
+    const out: AthleteProfile[] = [];
+    for (const part of chunk([...new Set(ids)], 300)) {
+      const { data, error } = await this.client.from(PROFILES).select("data").in("id", part);
+      if (error) throw error;
+      for (const r of data ?? []) out.push(r.data as AthleteProfile);
+    }
+    return out;
+  }
+
   async listByOwner(ownerId: string): Promise<AthleteProfile[]> {
     const { data, error } = await this.client
       .from(PROFILES)
@@ -105,12 +138,10 @@ export class SupabaseAthleteProfileRepository implements AthleteProfileRepositor
   }
 
   async listAll(): Promise<AthleteProfile[]> {
-    const { data, error } = await this.client
-      .from(PROFILES)
-      .select("data")
-      .order("created_at", { ascending: true });
-    if (error) throw error;
-    return (data ?? []).map((r) => r.data as AthleteProfile);
+    const rows = await fetchAllRows((from, to) =>
+      this.client.from(PROFILES).select("data").order("created_at", { ascending: true }).range(from, to),
+    );
+    return (rows as { data: AthleteProfile }[]).map((r) => r.data);
   }
 
   async update(
@@ -195,6 +226,24 @@ export class SupabaseCheckInRepository implements CheckInRepository {
       .limit(limit);
     if (error) throw error;
     return (data ?? []).map((r) => r.data as DailyCheckIn);
+  }
+
+  async listRecentForProfiles(profileIds: string[], perProfile = 40): Promise<Map<string, DailyCheckIn[]>> {
+    const byProfile = new Map<string, DailyCheckIn[]>();
+    const ids = [...new Set(profileIds)];
+    if (!ids.length) return byProfile;
+    for (const part of chunk(ids, 200)) {
+      const rows = await fetchAllRows((from, to) =>
+        this.client.from(CHECKINS).select("data").in("profile_id", part).order("date", { ascending: false }).range(from, to),
+      );
+      for (const r of rows as { data: DailyCheckIn }[]) {
+        const ci = r.data;
+        const list = byProfile.get(ci.profileId) || [];
+        if (list.length < perProfile) list.push(ci);
+        byProfile.set(ci.profileId, list);
+      }
+    }
+    return byProfile;
   }
 
   async getByDate(
@@ -393,9 +442,11 @@ export class SupabaseRecordRepository implements RecordRepository {
     return (data as SbRecordRow[]).map((r) => sbRecord<T>(r));
   }
   async listByKind<T>(kind: string, limit = 1000) {
-    const { data, error } = await this.client.from(RECORDS).select("*").eq("kind", kind).order("created_at").limit(limit);
-    if (error) throw error;
-    return (data as SbRecordRow[]).map((r) => sbRecord<T>(r));
+    const rows = await fetchAllRows(
+      (from, to) => this.client.from(RECORDS).select("*").eq("kind", kind).order("created_at").range(from, to),
+      limit,
+    );
+    return (rows as SbRecordRow[]).map((r) => sbRecord<T>(r));
   }
   async delete(kind: string, id: string) {
     const { data, error } = await this.client.from(RECORDS).delete().eq("kind", kind).eq("id", id).select("id");

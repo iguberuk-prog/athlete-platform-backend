@@ -19,8 +19,14 @@ export interface AthleteProfileRepository {
   getById(ownerId: string, id: string): Promise<AthleteProfile | null>;
   /** Unscoped lookup. Only for services that have already checked access (family links). */
   findById(id: string): Promise<AthleteProfile | null>;
+  /**
+   * Batch unscoped lookup by id (one query, not N). For roster/dashboard views
+   * where access was already established via team membership. Order is not
+   * guaranteed; callers key by id.
+   */
+  findManyByIds(ids: string[]): Promise<AthleteProfile[]>;
   listByOwner(ownerId: string): Promise<AthleteProfile[]>;
-  /** Every profile across all owners. Admin-only — call sites must gate access. */
+  /** Every profile across all owners. Admin-only — call sites must gate access. Pages past any row cap. */
   listAll(): Promise<AthleteProfile[]>;
   update(ownerId: string, id: string, input: ProfileInput): Promise<AthleteProfile | null>;
   delete(ownerId: string, id: string): Promise<boolean>;
@@ -31,6 +37,12 @@ export interface CheckInRepository {
   upsert(ownerId: string, input: CheckInInput): Promise<DailyCheckIn>;
   /** List check-ins for a profile, newest first, optionally limited. */
   listByProfile(ownerId: string, profileId: string, limit?: number): Promise<DailyCheckIn[]>;
+  /**
+   * Recent check-ins for many profiles in one query (not N). Returns a map of
+   * profileId -> newest-first check-ins, each capped at `perProfile`. Used by
+   * club/team dashboards so they scale to large rosters.
+   */
+  listRecentForProfiles(profileIds: string[], perProfile?: number): Promise<Map<string, DailyCheckIn[]>>;
   /** Get a single check-in by date (YYYY-MM-DD), or null. */
   getByDate(ownerId: string, profileId: string, date: string): Promise<DailyCheckIn | null>;
   delete(ownerId: string, id: string): Promise<boolean>;

@@ -29,6 +29,30 @@ const ALPHA = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
 const code = (n = 8) => Array.from({ length: n }, () => ALPHA[randomInt(ALPHA.length)]).join("");
 const clean = (s: unknown, max: number) => (typeof s === "string" ? s.trim().slice(0, max) : "");
 const isDay = (v: unknown): v is string => typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v);
+const isEmail = (v: unknown): v is string => typeof v === "string" && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v.trim());
+
+/**
+ * A pre-provisioned, claimable roster slot created by a bulk import. The club
+ * uploads a roster; each row becomes a claim with a one-time token emailed to
+ * the family. When the family signs up and redeems the token, their new profile
+ * is auto-joined to the right team and the claim flips to "joined".
+ */
+interface Claim {
+  token: string;
+  clubId: string;
+  clubName: string;
+  teamId: string;
+  teamName: string;
+  fullName: string;
+  dateOfBirth?: string;
+  parentEmail?: string;
+  jerseyNumber?: number;
+  status: "pending" | "joined";
+  profileId?: string;
+  joinedAt?: string;
+  createdAt: string;
+  invitedBy: string;
+}
 
 export function clubActive(c: Club, today = new Date().toISOString().slice(0, 10)): boolean {
   return c.plan === "active" || c.plan === "free" || (c.plan === "trial" && !!c.trialEnds && c.trialEnds >= today);
@@ -243,14 +267,23 @@ export class ClubService {
     return { ok: true, value: { id: team.id, name: team.name, code: team.code } };
   }
 
-  /** Every player in the club, with their team name and owner id. */
+  /**
+   * Every player in the club, with their team name and owner id.
+   * Batched: one profile lookup for the whole club (not one per player), so it
+   * scales to large rosters instead of issuing a query per athlete.
+   */
   private async roster(clubId: string) {
-    const out: { team: { id: string; name: string }; ownerId: string; p: AthleteProfile }[] = [];
+    const refs: { teamId: string; teamName: string; profileId: string; ownerId: string }[] = [];
     for (const t of await this.clubTeams(clubId)) {
       for (const m of await this.teams.listMembers(t.id)) {
-        const p = await this.profiles.getById(m.ownerId, m.profileId);
-        if (p) out.push({ team: { id: t.id, name: t.name }, ownerId: m.ownerId, p });
+        refs.push({ teamId: t.id, teamName: t.name, profileId: m.profileId, ownerId: m.ownerId });
       }
+    }
+    const byId = new Map((await this.profiles.findManyByIds(refs.map((r) => r.profileId))).map((p) => [p.id, p]));
+    const out: { team: { id: string; name: string }; ownerId: string; p: AthleteProfile }[] = [];
+    for (const r of refs) {
+      const p = byId.get(r.profileId);
+      if (p) out.push({ team: { id: r.teamId, name: r.teamName }, ownerId: r.ownerId, p });
     }
     return out;
   }
@@ -305,9 +338,10 @@ export class ClubService {
     const club = r.value.club;
     const teams = await this.clubTeams(clubId);
     const roster = await this.roster(clubId);
+    const recent = await this.checkins.listRecentForProfiles(roster.map((x) => x.p.id), 40);
     const byTeam = new Map<string, { p: AthleteProfile; checkins: Awaited<ReturnType<CheckInRepository["listByProfile"]>> }[]>();
     for (const x of roster) {
-      const cis = await this.checkins.listByProfile(x.ownerId, x.p.id, 40);
+      const cis = recent.get(x.p.id) || [];
       byTeam.set(x.team.id, [...(byTeam.get(x.team.id) || []), { p: x.p, checkins: cis }]);
     }
     const health = teams.map((t) => teamHealth(t.id, t.name, byTeam.get(t.id) || [], today));
@@ -324,6 +358,129 @@ export class ClubService {
         onCall: staff.filter((s) => s.onCall?.active).map((s) => ({ name: s.name, phone: s.phone, location: s.onCall?.location, until: s.onCall?.until })),
       },
     };
+  }
+
+  // --- bulk onboarding: roster import -> claimable invite links ----------------
+
+  /**
+   * Import a roster (names, optional team, DOB, parent email). Each row becomes
+   * a pre-provisioned claim slot with a one-time join link emailed to the family.
+   * Director or coach only. Scales to a full club in one call.
+   */
+  async importRoster(
+    userId: string,
+    clubId: string,
+    b: { teamId?: string; teamName?: string; ageGroup?: string; rows?: unknown[] },
+    appUrl: string,
+  ): Promise<CResult<{ created: number; emailed: number; teamId: string; teamName: string; errors: { row: number; reason: string }[] }>> {
+    const r = await this.need(clubId, userId, ["director", "coach"]);
+    if (!r.ok) return r;
+    const rows = Array.isArray(b.rows) ? b.rows : [];
+    if (!rows.length) return { ok: false, code: "invalid", message: "Add at least one athlete to import." };
+    if (rows.length > 2000) return { ok: false, code: "invalid", message: "Import up to 2,000 athletes at a time." };
+
+    const clubTeams = await this.clubTeams(clubId);
+    let teamId = clean(b.teamId, 64);
+    let teamName = "";
+    if (teamId) {
+      const t = clubTeams.find((x) => x.id === teamId);
+      if (!t) return { ok: false, code: "invalid", message: "Pick a team that belongs to this club." };
+      teamName = t.name;
+    } else if (clean(b.teamName, 80)) {
+      const made = await this.addTeam(userId, clubId, { name: b.teamName, ageGroup: b.ageGroup });
+      if (!made.ok) return made;
+      teamId = made.value.id;
+      teamName = made.value.name;
+    } else {
+      return { ok: false, code: "invalid", message: "Choose a team (or a new team name) for this roster." };
+    }
+
+    const errors: { row: number; reason: string }[] = [];
+    let created = 0, emailed = 0;
+    for (let i = 0; i < rows.length; i++) {
+      const row = (rows[i] || {}) as Record<string, unknown>;
+      const fullName = clean(row.fullName ?? row.name, 80);
+      if (!fullName) { errors.push({ row: i + 1, reason: "Missing athlete name" }); continue; }
+      const dateOfBirth = isDay(row.dateOfBirth) ? (row.dateOfBirth as string) : isDay(row.dob) ? (row.dob as string) : undefined;
+      const parentEmail = isEmail(row.parentEmail) ? String(row.parentEmail).trim().toLowerCase() : isEmail(row.email) ? String(row.email).trim().toLowerCase() : undefined;
+      const jn = Number(row.jerseyNumber ?? row.jersey);
+      const jerseyNumber = Number.isFinite(jn) && jn >= 0 && jn < 1000 ? jn : undefined;
+      const token = code(10);
+      const claim: Claim = { token, clubId, clubName: r.value.club.name, teamId, teamName, fullName, dateOfBirth, parentEmail, jerseyNumber, status: "pending", createdAt: new Date().toISOString(), invitedBy: userId };
+      await this.records.put<Claim>({ id: token, kind: "claim", key: clubId, ownerId: userId, data: claim });
+      created++;
+      if (parentEmail) {
+        const link = `${appUrl.replace(/\/+$/, "")}/#/join?claim=${token}`;
+        const text = `${r.value.club.name} invites ${fullName} to join ${teamName} on Athlete Performance.\n\nSet up ${fullName}'s account and join the team here:\n${link}\n\nThis link is just for your family. It pre-fills ${fullName}'s name and team, so setup takes about a minute.`;
+        const res = await this.mailer.send({ to: [parentEmail], subject: `${fullName}: join ${teamName} (${r.value.club.name})`, text, html: text.split("\n\n").map((t) => `<p>${escHtml(t)}</p>`).join("") });
+        if (res.sent) emailed++;
+      }
+    }
+    return { ok: true, value: { created, emailed, teamId, teamName, errors } };
+  }
+
+  /** Public prefill for a claim link (name + team only, no health data). */
+  async claimInfo(token: string): Promise<{ clubName: string; teamName: string; fullName: string; dateOfBirth?: string; status: string } | null> {
+    const c = (await this.records.get<Claim>("claim", clean(token, 32)))?.data;
+    if (!c) return null;
+    return { clubName: c.clubName, teamName: c.teamName, fullName: c.fullName, dateOfBirth: c.dateOfBirth, status: c.status };
+  }
+
+  /** Family redeems a claim: their new profile is auto-joined to the right team. */
+  async redeemClaim(userId: string, profileId: string, token: string): Promise<CResult<{ clubName: string; teamName: string; teamId: string }>> {
+    const rec = await this.records.get<Claim>("claim", clean(token, 32));
+    if (!rec) return { ok: false, code: "invalid", message: "That invite link is wrong or expired." };
+    const c = rec.data;
+    if (c.status === "joined") return { ok: false, code: "invalid", message: "That invite has already been used." };
+    const profile = await this.profiles.getById(userId, profileId);
+    if (!profile) return { ok: false, code: "not_found", message: "Set up the athlete's profile first, then join." };
+    const team = await this.teams.getById(c.teamId);
+    if (!team) return { ok: false, code: "not_found", message: "That team no longer exists." };
+    await this.teams.addMember({ teamId: c.teamId, profileId, ownerId: userId, joinedAt: new Date().toISOString() });
+    await this.records.put<Claim>({ id: c.token, kind: "claim", key: c.clubId, ownerId: rec.ownerId, data: { ...c, status: "joined", profileId, joinedAt: new Date().toISOString() } });
+    return { ok: true, value: { clubName: c.clubName, teamName: c.teamName, teamId: c.teamId } };
+  }
+
+  /** Director/coach: how many invited athletes have joined vs are still pending. */
+  async importStatus(userId: string, clubId: string): Promise<CResult<{ total: number; pending: number; joined: number; rows: { fullName: string; team: string; parentEmail?: string; status: string; invitedAt: string; joinedAt?: string }[] }>> {
+    const r = await this.need(clubId, userId, ["director", "coach", "trainer"]);
+    if (!r.ok) return r;
+    const claims = (await this.records.listByKey<Claim>("claim", clubId)).map((x) => x.data);
+    const director = r.value.role === "director";
+    const rows = claims
+      .sort((a, b) => Number(a.status === "joined") - Number(b.status === "joined") || a.fullName.localeCompare(b.fullName))
+      .map((c) => ({ fullName: c.fullName, team: c.teamName, parentEmail: director ? c.parentEmail : undefined, status: c.status, invitedAt: c.createdAt, joinedAt: c.joinedAt }));
+    return { ok: true, value: { total: claims.length, pending: claims.filter((c) => c.status === "pending").length, joined: claims.filter((c) => c.status === "joined").length, rows } };
+  }
+
+  // --- club-admin: player-level roster + top-down removal ----------------------
+
+  /** Every active athlete in the club, by team, with status. Scales via batched reads. */
+  async rosterView(userId: string, clubId: string, today = new Date().toISOString().slice(0, 10)): Promise<CResult<{ club: string; teams: number; totalPlayers: number; rows: { profileId: string; name: string; playerCode?: string; team: string; teamId: string; checkedInToday: boolean; lastCheckin: string | null; notCleared: boolean; injured: boolean }[] }>> {
+    const r = await this.need(clubId, userId, ["director", "coach", "trainer"]);
+    if (!r.ok) return r;
+    const roster = await this.roster(clubId);
+    const recent = await this.checkins.listRecentForProfiles(roster.map((x) => x.p.id), 1);
+    const rows = roster.map((x) => {
+      const last = (recent.get(x.p.id) || [])[0] || null;
+      return {
+        profileId: x.p.id, name: x.p.identity.fullName, playerCode: x.p.identity.playerCode,
+        team: x.team.name, teamId: x.team.id,
+        checkedInToday: last?.date === today, lastCheckin: last?.date ?? null,
+        notCleared: (x.p.health?.concussions || []).some((c) => !c.clearedAt),
+        injured: (x.p.health?.currentInjuries || []).length > 0,
+      };
+    });
+    rows.sort((a, b) => a.team.localeCompare(b.team) || a.name.localeCompare(b.name));
+    return { ok: true, value: { club: r.value.club.name, teams: (await this.clubTeams(clubId)).length, totalPlayers: rows.length, rows } };
+  }
+
+  /** Director/coach removes an athlete from one of the club's teams. */
+  async removePlayer(userId: string, clubId: string, teamId: string, profileId: string): Promise<CResult<true>> {
+    const r = await this.need(clubId, userId, ["director", "coach"]);
+    if (!r.ok) return r;
+    if (!(await this.clubTeams(clubId)).some((t) => t.id === teamId)) return { ok: false, code: "not_found", message: "That team isn't in this club." };
+    return (await this.teams.removeMember(teamId, clean(profileId, 64))) ? { ok: true, value: true } : { ok: false, code: "not_found" };
   }
 
   // --- fields: status and weather ---------------------------------------------

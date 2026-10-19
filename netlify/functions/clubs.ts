@@ -36,6 +36,7 @@ export default async (req: Request, context: Context): Promise<Response> => {
   const clubId = context.params?.clubId;
   const sub = clubId ? url.pathname.split(`/api/clubs/${clubId}`)[1] || "" : "";
   const today = dateParam(url, "date", utcToday());
+  const appUrl = process.env.APP_URL || url.origin;
   try {
     const b = req.method === "GET" || req.method === "DELETE" ? {} : ((await req.json().catch(() => ({}))) as Record<string, any>);
     if (url.pathname === "/api/clubs") {
@@ -54,6 +55,10 @@ export default async (req: Request, context: Context): Promise<Response> => {
       case "GET /teams": { const r = await svc.get(user.id, clubId); return r.ok ? json({ teams: r.value.teams }) : out(r); }
       case "POST /teams": return out(await svc.addTeam(user.id, clubId, b), 201);
       case "GET /dashboard": return out(await svc.dashboard(user.id, clubId, today));
+      case "GET /roster": return out(await svc.rosterView(user.id, clubId, today));
+      case "POST /roster/import": return out(await svc.importRoster(user.id, clubId, b, appUrl), 201);
+      case "GET /roster/imports": return out(await svc.importStatus(user.id, clubId));
+      case "POST /roster/remove": return out(await svc.removePlayer(user.id, clubId, b.teamId, b.profileId));
       case "GET /medical": return out(await svc.medicalRoster(user.id, clubId));
       case "GET /concussions": return out(await svc.concussionLog(user.id, clubId));
       case "POST /clear": return out(await svc.trainerClear(user.id, clubId, b.profileId, b.date));
@@ -73,6 +78,7 @@ export const config: Config = {
     "/api/clubs", "/api/clubs/join", "/api/clubs/:clubId", "/api/clubs/:clubId/invite",
     "/api/clubs/:clubId/staff", "/api/clubs/:clubId/staff/me", "/api/clubs/:clubId/staff/:userId",
     "/api/clubs/:clubId/teams", "/api/clubs/:clubId/dashboard", "/api/clubs/:clubId/medical", "/api/clubs/:clubId/concussions",
+    "/api/clubs/:clubId/roster", "/api/clubs/:clubId/roster/import", "/api/clubs/:clubId/roster/imports", "/api/clubs/:clubId/roster/remove",
     "/api/clubs/:clubId/clear", "/api/clubs/:clubId/fields", "/api/clubs/:clubId/billing/checkout", "/api/clubs/:clubId/billing/portal",
     "/api/clubs/:clubId/camps",
   ],

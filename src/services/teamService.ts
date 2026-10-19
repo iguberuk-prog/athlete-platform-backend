@@ -70,12 +70,14 @@ export class TeamService {
     if (team.coachOwnerId !== coachOwnerId) return { ok: false, code: "forbidden" };
 
     const members = await this.teams.listMembers(teamId);
+    // Batched: one profile lookup + one check-in lookup for the whole roster.
+    const byId = new Map((await this.profiles.findManyByIds(members.map((m) => m.profileId))).map((p) => [p.id, p]));
+    const recentByProfile = await this.checkins.listRecentForProfiles(members.map((m) => m.profileId), 1);
     const players: RosterEntry[] = [];
     for (const m of members) {
-      const p = await this.profiles.getById(m.ownerId, m.profileId);
+      const p = byId.get(m.profileId);
       if (!p) continue;
-      const recent = await this.checkins.listByProfile(m.ownerId, m.profileId, 1);
-      const last = recent[0] || null;
+      const last = (recentByProfile.get(m.profileId) || [])[0] || null;
       const nm = nextMatchFrom(p, today);
       players.push({
         profileId: p.id,

@@ -57,7 +57,7 @@ export default async (req: Request, context: Context): Promise<Response> => {
       case "GET /dashboard": return out(await svc.dashboard(user.id, clubId, today));
       case "GET /roster": return out(await svc.rosterView(user.id, clubId, today));
       case "POST /roster/import": return out(await svc.importRoster(user.id, clubId, b, appUrl), 201);
-      case "GET /roster/imports": return out(await svc.importStatus(user.id, clubId));
+      case "GET /roster/imports": return out(await svc.importStatus(user.id, clubId, appUrl));
       case "POST /roster/remove": return out(await svc.removePlayer(user.id, clubId, b.teamId, b.profileId));
       case "GET /medical": return out(await svc.medicalRoster(user.id, clubId));
       case "GET /concussions": return out(await svc.concussionLog(user.id, clubId));

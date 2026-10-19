@@ -441,15 +441,23 @@ export class ClubService {
     return { ok: true, value: { clubName: c.clubName, teamName: c.teamName, teamId: c.teamId } };
   }
 
-  /** Director/coach: how many invited athletes have joined vs are still pending. */
-  async importStatus(userId: string, clubId: string): Promise<CResult<{ total: number; pending: number; joined: number; rows: { fullName: string; team: string; parentEmail?: string; status: string; invitedAt: string; joinedAt?: string }[] }>> {
+  /**
+   * Director/coach: how many invited athletes have joined vs are still pending.
+   * Directors also get each pending athlete's invite link, so they can copy or
+   * resend it themselves (for example when email is not configured).
+   */
+  async importStatus(userId: string, clubId: string, appUrl?: string): Promise<CResult<{ total: number; pending: number; joined: number; rows: { fullName: string; team: string; parentEmail?: string; status: string; invitedAt: string; joinedAt?: string; inviteLink?: string }[] }>> {
     const r = await this.need(clubId, userId, ["director", "coach", "trainer"]);
     if (!r.ok) return r;
     const claims = (await this.records.listByKey<Claim>("claim", clubId)).map((x) => x.data);
     const director = r.value.role === "director";
+    const base = (appUrl || "").replace(/\/+$/, "");
     const rows = claims
       .sort((a, b) => Number(a.status === "joined") - Number(b.status === "joined") || a.fullName.localeCompare(b.fullName))
-      .map((c) => ({ fullName: c.fullName, team: c.teamName, parentEmail: director ? c.parentEmail : undefined, status: c.status, invitedAt: c.createdAt, joinedAt: c.joinedAt }));
+      .map((c) => ({
+        fullName: c.fullName, team: c.teamName, parentEmail: director ? c.parentEmail : undefined, status: c.status, invitedAt: c.createdAt, joinedAt: c.joinedAt,
+        inviteLink: director && base && c.status === "pending" ? `${base}/#/join?claim=${c.token}` : undefined,
+      }));
     return { ok: true, value: { total: claims.length, pending: claims.filter((c) => c.status === "pending").length, joined: claims.filter((c) => c.status === "joined").length, rows } };
   }
 

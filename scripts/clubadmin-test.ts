@@ -72,8 +72,15 @@ const token = (await records.listByKey<{ fullName: string; token: string; parent
 const info = await clubs.claimInfo(token);
 check("claimInfo prefills name + team (no health data)", info?.fullName === "Josh Guberuk" && info?.teamName === "STA U14 Boys" && !("health" in (info || {})));
 
-const stat1 = await clubs.importStatus("dir", clubId);
+const stat1 = await clubs.importStatus("dir", clubId, APP);
 check("importStatus: 3 invited, 3 pending, 0 joined", stat1.ok && stat1.value.total === 3 && stat1.value.pending === 3 && stat1.value.joined === 0);
+check("director sees a copyable invite link per pending athlete", stat1.ok && stat1.value.rows.every((r) => typeof r.inviteLink === "string" && r.inviteLink!.startsWith(`${APP}/#/join?claim=`)));
+{
+  const inv = await clubs.invite("dir", clubId, "coach");
+  const joined = inv.ok ? await clubs.join("coach1", "coach1@sta.com", inv.value.code, "Coach One") : null;
+  const coachView = await clubs.importStatus("coach1", clubId, APP);
+  check("coach does not get invite links or parent emails", !!joined?.ok && coachView.ok && coachView.value.rows.every((r) => r.inviteLink === undefined && r.parentEmail === undefined));
+}
 
 // A family signs up, creates the athlete's profile, and redeems the token.
 const famProfile = await profiles.create("parentAcct", input("Josh Guberuk"));

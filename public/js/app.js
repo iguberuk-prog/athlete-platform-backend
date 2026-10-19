@@ -37,6 +37,7 @@ import * as ask from "./views/ask.js";
 import * as fun from "./views/fun.js";
 import * as connect from "./views/connect.js";
 import * as invite from "./views/invite.js";
+import * as join from "./views/join.js";
 import { openSearch, closeSearch } from "./search.js";
 
 export const state = {
@@ -50,12 +51,12 @@ const VIEWS = {
   today, gameday, recovery, checkin, more, schedule, trends, grocery, team,
   profile, program, reminders: settings, account: settings,
   health, meals, scan, devices, family, report, club, teamhub, experts,
-  journal, progress, mind, tournament, emergency, safesport, budget, season, ask, fun, connect, invite,
+  journal, progress, mind, tournament, emergency, safesport, budget, season, ask, fun, connect, invite, join,
 };
 
 // Views register click handlers by name; buttons carry data-act="name".
 const actions = {};
-for (const v of [auth, profile, today, gameday, recovery, checkin, more, schedule, trends, grocery, team, settings, program, health, meals, scan, devices, family, report, club, teamhub, experts, journal, progress, mind, tournament, emergency, safesport, budget, season, ask, fun, connect, invite]) {
+for (const v of [auth, profile, today, gameday, recovery, checkin, more, schedule, trends, grocery, team, settings, program, health, meals, scan, devices, family, report, club, teamhub, experts, journal, progress, mind, tournament, emergency, safesport, budget, season, ask, fun, connect, invite, join]) {
   Object.assign(actions, v.actions || {});
 }
 
@@ -119,6 +120,7 @@ const TITLES = {
   health: "Health", meals: "Meals", scan: "Scan food", devices: "Devices", family: "Family", report: "Weekly report",
   club: "Club", teamhub: "Team", experts: "Dietitians and camps",
   journal: "Journal", progress: "Progress", mind: "Mental skills", tournament: "Tournament", emergency: "Emergency card", safesport: "Safe sport", budget: "Season budget", season: "Season review", ask: "Ask", fun: "Fun", connect: "Team apps", invite: "Invite a friend",
+  join: "Join your team",
 };
 
 const FUN_TITLES = { quiz: "Car ride quiz", cook: "Family cook night", hunt: "Grocery hunt", wrapped: "Season wrapped" };
@@ -139,9 +141,14 @@ export async function render() {
   const app = $("#app");
   state.route = parseHash();
   if (state.route.name === "join") {
-    if (state.route.query.code) storeSet("pendingJoin", String(state.route.query.code).toUpperCase().slice(0, 8));
-    history.replaceState(null, "", state.user ? "#/team" : "#/signup");
-    state.route = parseHash();
+    // Club roster invite (#/join?claim=TOKEN): signed out gets the welcome page, signed in matches the athlete.
+    if (state.route.query.claim && !state.user) { await join.renderLanding(app, state.route.query.claim); return; }
+    // Coach's team code (#/join?code=ABC123): remember it and continue to sign-up or the Team screen.
+    if (!state.route.query.claim && !state.route.query.done && !join.pendingClaim()) {
+      if (state.route.query.code) storeSet("pendingJoin", String(state.route.query.code).toUpperCase().slice(0, 8));
+      history.replaceState(null, "", state.user ? "#/team" : "#/signup");
+      state.route = parseHash();
+    }
   }
 
   if (state.route.name === "invite" && state.route.query.code) {
@@ -158,7 +165,7 @@ export async function render() {
 
   let name = state.route.name;
   const needsProfile = !isCoach() && !state.profiles.length;
-  if (needsProfile && !(name === "profile" && state.route.sub === "new") && !["account", "reminders"].includes(name)) {
+  if (needsProfile && !(name === "profile" && state.route.sub === "new") && !["account", "reminders", "join"].includes(name)) {
     name = "profile"; state.route = { name, sub: "new", query: { first: "1" } };
   }
   if (!VIEWS[name]) { name = isCoach() && !state.profiles.length ? "team" : "today"; state.route.name = name; }
@@ -274,7 +281,9 @@ export async function afterSignIn() {
   redeemInvite();
   await loadProfiles();
   await loadClub().catch(() => {});
-  if (!location.hash || location.hash === "#/" || location.hash.startsWith("#/login") || location.hash.startsWith("#/signup")) {
+  if (join.pendingClaim() && !location.hash.startsWith("#/join")) {
+    location.hash = "#/join"; // finish the club invite before anything else
+  } else if (!location.hash || location.hash === "#/" || location.hash.startsWith("#/login") || location.hash.startsWith("#/signup")) {
     location.hash = isCoach() && !state.profiles.length ? "#/team" : "#/today";
   }
   await render();

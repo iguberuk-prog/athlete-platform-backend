@@ -19,6 +19,11 @@
  *   POST /api/clubs/:clubId/billing/checkout { seats }  director
  *   POST /api/clubs/:clubId/billing/portal         director
  *   POST /api/clubs/:clubId/camps                  director: post a camp or clinic
+ *   GET  /api/clubs/:clubId/roster                 staff: every player in the club, by team
+ *   POST /api/clubs/:clubId/roster/import          director, coach: bulk roster -> claimable invite links
+ *   GET  /api/clubs/:clubId/roster/imports         staff: who joined, who is pending (directors get links)
+ *   POST /api/clubs/:clubId/roster/remove          director, coach: { teamId, profileId }
+ *   POST /api/clubs/:clubId/roster/revoke          director: { token } cancel a pending invite
  */
 
 import type { Config, Context } from "@netlify/functions";
@@ -59,6 +64,7 @@ export default async (req: Request, context: Context): Promise<Response> => {
       case "POST /roster/import": return out(await svc.importRoster(user.id, clubId, b, appUrl), 201);
       case "GET /roster/imports": return out(await svc.importStatus(user.id, clubId, appUrl));
       case "POST /roster/remove": return out(await svc.removePlayer(user.id, clubId, b.teamId, b.profileId));
+      case "POST /roster/revoke": return out(await svc.revokeClaim(user.id, clubId, b.token));
       case "GET /medical": return out(await svc.medicalRoster(user.id, clubId));
       case "GET /concussions": return out(await svc.concussionLog(user.id, clubId));
       case "POST /clear": return out(await svc.trainerClear(user.id, clubId, b.profileId, b.date));
@@ -78,7 +84,7 @@ export const config: Config = {
     "/api/clubs", "/api/clubs/join", "/api/clubs/:clubId", "/api/clubs/:clubId/invite",
     "/api/clubs/:clubId/staff", "/api/clubs/:clubId/staff/me", "/api/clubs/:clubId/staff/:userId",
     "/api/clubs/:clubId/teams", "/api/clubs/:clubId/dashboard", "/api/clubs/:clubId/medical", "/api/clubs/:clubId/concussions",
-    "/api/clubs/:clubId/roster", "/api/clubs/:clubId/roster/import", "/api/clubs/:clubId/roster/imports", "/api/clubs/:clubId/roster/remove",
+    "/api/clubs/:clubId/roster", "/api/clubs/:clubId/roster/import", "/api/clubs/:clubId/roster/imports", "/api/clubs/:clubId/roster/remove", "/api/clubs/:clubId/roster/revoke",
     "/api/clubs/:clubId/clear", "/api/clubs/:clubId/fields", "/api/clubs/:clubId/billing/checkout", "/api/clubs/:clubId/billing/portal",
     "/api/clubs/:clubId/camps",
   ],

@@ -66,6 +66,7 @@ a { color: var(--lime); }
 .av { width: 28px; height: 28px; border-radius: 50%; flex: none; overflow: hidden; display: grid; place-items: center;
   background: linear-gradient(135deg, #27425f, #16202b); color: var(--lime); font-weight: 800; font-size: 11px; border: 1px solid var(--line2); }
 .av img { width: 100%; height: 100%; object-fit: cover; }
+.av.md { width: 40px; height: 40px; font-size: 14px; }
 .av.lg { width: 56px; height: 56px; font-size: 18px; }
 .av.xl { width: 88px; height: 88px; font-size: 26px; }
 
@@ -536,3 +537,17 @@ details.rcard[open] > summary { margin-bottom: 6px; }
 .todaytools .searchbtn svg { flex: none; width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 2; }
 .todaytools .hbtn { height: 48px; }
 @media (max-width: 360px) { .hbtn.invite span { display: none; } }
+
+/* ---- club console: import preview, invite QR sheet ---- */
+.player .actions { margin-top: 8px; }
+.player .actions .btn.sm { min-height: 34px; padding: 6px 10px; font-size: 12.5px; }
+.qrgrid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 10px; }
+.qrcard { display: flex; gap: 10px; align-items: center; border: 1px solid var(--line2); border-radius: 10px; padding: 8px; background: #fff; color: #000; break-inside: avoid; }
+.qrcard svg { width: 92px; height: 92px; display: block; }
+.qrcard .small { font-size: 10px; color: #333; }
+.qrcard b { font-size: 13px; }
+@media print {
+  .qrgrid { grid-template-columns: repeat(3, 1fr); }
+  body.printInvites #view > :not(#clubBody), body.printInvites #clubBody > :not(#invPrint) { display: none !important; }
+  .qrcard { page-break-inside: avoid; }
+}

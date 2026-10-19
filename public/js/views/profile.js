@@ -2,8 +2,9 @@
 
 import { $, $$, esc, msg, avatar, kgToLb, lbToKg, toast } from "../ui.js";
 import { api, errText } from "../api.js";
-import { state, active, isParent, loadProfiles, setActive, go, render as rerender, syncReminders } from "../app.js";
+import { state, active, isParent, loadProfiles, loadClub, setActive, go, render as rerender, syncReminders } from "../app.js";
 import { ageFromDob, programFor } from "../programs.js";
+import { pendingClaim, clearClaim, setLastJoined } from "./join.js";
 
 export const SPORTS = {
   soccer: { label: "Soccer", code: "SOC", positions: [["goalkeeper", "Goalkeeper"], ["defender", "Defender"], ["fullback", "Fullback"], ["midfielder", "Midfielder"], ["winger", "Winger"], ["forward", "Forward"]] },
@@ -33,6 +34,8 @@ const STEPS = 4;
 let pendingAvatar = null;
 let step = 1;
 let isNew = true;
+/** True while setting up a profile from a club invite link; the claim is redeemed right after saving. */
+let claimMode = false;
 /** Allergy interview state: answer + per-allergen detail. Keys: allergen id, or "other:<name>". */
 let fs = { answer: null, detail: {} };
 
@@ -284,7 +287,10 @@ function showStep(n) {
 // ---------------------------------------------------------------------------
 export async function render(el, ctx) {
   isNew = ctx.sub === "new" || !ctx.profile;
-  const p = isNew ? null : ctx.profile;
+  claimMode = isNew && !!ctx.query?.claim && !!pendingClaim();
+  const claim = claimMode ? pendingClaim() : null;
+  // From a club invite: name, birthday and jersey come from the roster. Everything else is the family's.
+  const p = isNew ? (claim ? { identity: { fullName: claim.fullName, dateOfBirth: claim.dateOfBirth, jerseyNumber: claim.jerseyNumber, clubTeam: claim.teamName } } : null) : ctx.profile;
   pendingAvatar = null;
   fs = { answer: null, detail: {} };
   if (p) {
@@ -299,6 +305,7 @@ export async function render(el, ctx) {
   if (isNew) {
     const first = !state.profiles.length;
     el.innerHTML = `
+      ${claim ? `<div class="msg info" style="margin:0 0 12px"><b>${esc(claim.clubName)}</b> invited <b>${esc(claim.fullName)}</b> to ${esc(claim.teamName)}. Name, birthday and jersey number are filled in from the club roster; check them on step 2. When you finish, ${esc(String(claim.fullName).split(" ")[0])} joins the team.</div>` : ""}
       <div class="steps" aria-hidden="true">${"<i></i>".repeat(STEPS)}</div>
       <form class="card" data-submit="saveProfile" novalidate>
         <div class="eyebrow">Step <span id="stepNum">1</span> of ${STEPS}</div>
@@ -355,6 +362,8 @@ export async function render(el, ctx) {
   if (val("homeZip")) lookupZip(val("homeZip"), "#zipPlace");
   $("#otherAllergy").addEventListener("input", () => { renderAllergyDetails(); if (!isNew) renderReview(); });
   el.addEventListener("change", () => { if (!isNew || step === 4) renderReview(); });
+  // A roster birthday sets the age program, level choices and bedtime the same way a typed one would.
+  if (claim?.dateOfBirth) $("#dob").dispatchEvent(new Event("input"));
 }
 
 /** Shows "Roseland, NJ · 72°F now" under a ZIP field. */
@@ -524,6 +533,24 @@ export const actions = {
     // If the list didn't come back (server hiccup), still keep the profile we just saved so we don't ask again.
     if (!state.profiles.some((x) => x.id === r.data.id)) state.profiles.push(r.data);
     setActive(r.data.id);
+    // Set up from a club invite link: put the new profile on the team right away.
+    const claim = !editing && claimMode ? pendingClaim() : null;
+    if (claim) {
+      claimMode = false;
+      const j = await api(`/api/claim/${encodeURIComponent(claim.token)}/redeem`, { method: "POST", body: { profileId: r.data.id } });
+      syncReminders();
+      if (j.ok) {
+        clearClaim();
+        setLastJoined({ ...j.data, profileId: r.data.id });
+        await loadClub().catch(() => {});
+        toast(`Joined ${j.data.teamName}`);
+        go("#/join?done=1");
+      } else {
+        toast(errText(j), 5000);
+        go("#/join"); // the invite stays pending so the family can try again
+      }
+      return;
+    }
     toast(editing ? "Saved" : "You're all set");
     syncReminders();
     go(editing ? "#/more" : "#/program?welcome=1");

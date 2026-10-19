@@ -5,6 +5,7 @@ import { $, esc, todayStr, niceDate, msg, toast, storeGet, storeSet } from "../u
 import { api, errText } from "../api.js";
 import { render as rerender } from "../app.js";
 import { isNative } from "../native.js";
+import { setContext as setRosterContext, rosterTab, importTab, actions as rosterActions } from "./clubroster.js";
 
 const CERT = { safesport: "SafeSport", cpr_first_aid: "CPR / First Aid", concussion_training: "Concussion training", background_check: "Background check", coaching_license: "Coaching license", athletic_trainer_license: "AT license" };
 const ROLE = { director: "Director", coach: "Coach", trainer: "Athletic trainer" };
@@ -17,8 +18,12 @@ export async function render(el, ctx) {
   if (!ctx.seq()) return;
   if (!r.ok) { el.innerHTML = msg("err", errText(r)); return; }
   ({ club, role } = r.data);
+  setRosterContext({ club, role, teams: r.data.teams || [], rerender: () => rerender() });
   const tabs = [
-    ...(role !== "coach" ? [["dash", "Dashboard"], ["medical", "Medical"]] : []),
+    ...(role !== "coach" ? [["dash", "Dashboard"]] : []),
+    ["roster", "Players"],
+    ...(role !== "trainer" ? [["import", "Import"]] : []),
+    ...(role !== "coach" ? [["medical", "Medical"]] : []),
     ["teams", "Teams"], ["staff", "Staff"], ["fields", "Fields"],
     ...(role === "director" ? [["settings", "Settings"]] : []),
   ];
@@ -47,13 +52,15 @@ async function home(el, ctx) {
       <div class="row2"><input class="input" id="staffCode" placeholder="8-letter code" autocapitalize="characters"><input class="input" id="staffName" placeholder="Your name"></div>
       <div class="actions"><button class="btn primary block">Join</button></div></form>
     <form class="card" data-submit="clubCreate"><h3>Start a club</h3>
-      <p class="sub">For club directors. Includes a club dashboard, medical roster, concussion log, certifications, field alerts and branding. 30 days free.</p>
+      <p class="sub">For club directors. Import your roster and every family gets a personal link that puts their player on the right team. Club dashboard, medical roster, concussion log, certifications, field alerts and branding. 30 days free.</p>
       <input class="input" id="clubName" placeholder="Club name" maxlength="80">
       <input class="input" id="clubRef" placeholder="Referral code (optional)" style="margin-top:8px" autocapitalize="characters">
       <div class="actions"><button class="btn ghost block">Start a club</button></div></form>`;
 }
 
 const TABS = {
+  roster: rosterTab,
+  import: importTab,
   async dash(box) {
     const r = await api(`/api/clubs/${club.id}/dashboard?date=${todayStr()}`);
     if (!r.ok) { box.innerHTML = msg("err", errText(r)); return; }
@@ -162,6 +169,7 @@ let pendingLogo = null;
 const reload = () => rerender();
 
 export const actions = {
+  ...rosterActions,
   clubTab(btn) { storeSet(`clubTab:${club.id}`, btn.dataset.k); location.hash = `#/club/${club.id}`; rerender(); },
   async clubCreate() {
     const r = await api("/api/clubs", { method: "POST", body: { name: $("#clubName").value, referral: $("#clubRef").value || undefined } });

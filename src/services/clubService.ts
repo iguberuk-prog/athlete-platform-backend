@@ -419,11 +419,22 @@ export class ClubService {
     return { ok: true, value: { created, emailed, teamId, teamName, errors } };
   }
 
-  /** Public prefill for a claim link (name + team only, no health data). */
-  async claimInfo(token: string): Promise<{ clubName: string; teamName: string; fullName: string; dateOfBirth?: string; status: string } | null> {
+  /** Public prefill for a claim link (name, birthday, jersey and team only, no health data, no emails). */
+  async claimInfo(token: string): Promise<{ clubName: string; teamName: string; fullName: string; dateOfBirth?: string; jerseyNumber?: number; status: string } | null> {
     const c = (await this.records.get<Claim>("claim", clean(token, 32)))?.data;
     if (!c) return null;
-    return { clubName: c.clubName, teamName: c.teamName, fullName: c.fullName, dateOfBirth: c.dateOfBirth, status: c.status };
+    return { clubName: c.clubName, teamName: c.teamName, fullName: c.fullName, dateOfBirth: c.dateOfBirth, jerseyNumber: c.jerseyNumber, status: c.status };
+  }
+
+  /** Director removes a pending invite (wrong name, left the club). Joined claims stay as history. */
+  async revokeClaim(userId: string, clubId: string, token: string): Promise<CResult<true>> {
+    const r = await this.need(clubId, userId, ["director"]);
+    if (!r.ok) return r;
+    const rec = await this.records.get<Claim>("claim", clean(token, 32));
+    if (!rec || rec.data.clubId !== clubId) return { ok: false, code: "not_found", message: "That invite isn't in this club." };
+    if (rec.data.status === "joined") return { ok: false, code: "invalid", message: "That athlete already joined. Remove them from the Players tab instead." };
+    await this.records.delete("claim", rec.data.token);
+    return { ok: true, value: true };
   }
 
   /** Family redeems a claim: their new profile is auto-joined to the right team. */
@@ -446,7 +457,7 @@ export class ClubService {
    * Directors also get each pending athlete's invite link, so they can copy or
    * resend it themselves (for example when email is not configured).
    */
-  async importStatus(userId: string, clubId: string, appUrl?: string): Promise<CResult<{ total: number; pending: number; joined: number; rows: { fullName: string; team: string; parentEmail?: string; status: string; invitedAt: string; joinedAt?: string; inviteLink?: string }[] }>> {
+  async importStatus(userId: string, clubId: string, appUrl?: string): Promise<CResult<{ total: number; pending: number; joined: number; rows: { fullName: string; team: string; teamId: string; parentEmail?: string; jerseyNumber?: number; status: string; invitedAt: string; joinedAt?: string; inviteLink?: string; token?: string }[] }>> {
     const r = await this.need(clubId, userId, ["director", "coach", "trainer"]);
     if (!r.ok) return r;
     const claims = (await this.records.listByKey<Claim>("claim", clubId)).map((x) => x.data);
@@ -455,8 +466,9 @@ export class ClubService {
     const rows = claims
       .sort((a, b) => Number(a.status === "joined") - Number(b.status === "joined") || a.fullName.localeCompare(b.fullName))
       .map((c) => ({
-        fullName: c.fullName, team: c.teamName, parentEmail: director ? c.parentEmail : undefined, status: c.status, invitedAt: c.createdAt, joinedAt: c.joinedAt,
+        fullName: c.fullName, team: c.teamName, teamId: c.teamId, parentEmail: director ? c.parentEmail : undefined, jerseyNumber: c.jerseyNumber, status: c.status, invitedAt: c.createdAt, joinedAt: c.joinedAt,
         inviteLink: director && base && c.status === "pending" ? `${base}/#/join?claim=${c.token}` : undefined,
+        token: director && c.status === "pending" ? c.token : undefined,
       }));
     return { ok: true, value: { total: claims.length, pending: claims.filter((c) => c.status === "pending").length, joined: claims.filter((c) => c.status === "joined").length, rows } };
   }

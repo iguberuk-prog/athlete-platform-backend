@@ -1,18 +1,27 @@
 // Sign up, log in, forgot password, set new password.
 
-import { $, msg } from "../ui.js";
+import { $, esc, msg } from "../ui.js";
 import { signIn, signUp, sendReset, updatePassword } from "../api.js";
 import { afterSignIn } from "../app.js";
+import { pendingClaim } from "./join.js";
 
 const brand = `
   <div class="brandbig"><div class="mark">A</div><div><b>Athlete Performance</b><div class="muted small">Game-day fuel and recovery</div></div></div>`;
 
+/** Shown above log in / sign up while a club invite is waiting to be finished. */
+function claimBanner() {
+  const c = pendingClaim();
+  if (!c || !c.teamName) return "";
+  return `<div class="msg info" style="margin:0 0 16px"><b>${esc(c.clubName)}</b> invited <b>${esc(c.fullName)}</b> to ${esc(c.teamName)}. Finish signing in and we'll put ${esc(String(c.fullName).split(" ")[0])} on the team.</div>`;
+}
+
 function login() {
+  const claim = claimBanner();
   return `
   <div class="auth">
     ${brand}
-    <h1>Fuel your <span class="hl">game day.</span></h1>
-    <p class="muted">What to eat, when to eat it, and how to recover. Built around your body and your schedule.</p>
+    ${claim || `<h1>Fuel your <span class="hl">game day.</span></h1>
+    <p class="muted">What to eat, when to eat it, and how to recover. Built around your body and your schedule.</p>`}
     <form class="card" data-submit="login" novalidate>
       <h2>Log in</h2>
       <label class="f" for="email">Email</label>
@@ -28,17 +37,20 @@ function login() {
   </div>`;
 }
 
-function signup() {
+function signup(route) {
+  const role = ["athlete", "parent", "coach"].includes(route?.query?.role) ? route.query.role : "athlete";
+  const on = (r) => (r === role ? "checked" : "");
   return `
   <div class="auth">
     ${brand}
+    ${claimBanner()}
     <h1>Create your account</h1>
     <form class="card" data-submit="signup" novalidate>
       <h3>Who is signing up?</h3>
       <div class="roles">
-        <label class="role"><input type="radio" name="role" value="athlete" checked><div><b>I'm an athlete</b><span>13 or older, setting up my own plan</span></div></label>
-        <label class="role"><input type="radio" name="role" value="parent"><div><b>I'm a parent or guardian</b><span>Manage plans for one or more kids</span></div></label>
-        <label class="role"><input type="radio" name="role" value="coach"><div><b>I'm a coach</b><span>See my team's readiness and food needs</span></div></label>
+        <label class="role"><input type="radio" name="role" value="athlete" ${on("athlete")}><div><b>I'm an athlete</b><span>13 or older, setting up my own plan</span></div></label>
+        <label class="role"><input type="radio" name="role" value="parent" ${on("parent")}><div><b>I'm a parent or guardian</b><span>Manage plans for one or more kids</span></div></label>
+        <label class="role"><input type="radio" name="role" value="coach" ${on("coach")}><div><b>I'm a coach</b><span>See my team's readiness and food needs</span></div></label>
       </div>
       <label class="f" for="email">Email</label>
       <input class="input" id="email" type="email" autocomplete="email" inputmode="email" required />
@@ -88,16 +100,18 @@ function reset() {
 
 export async function render(el, route) {
   const screens = { signup, forgot, reset };
-  el.innerHTML = (screens[route.name] || login)();
+  el.innerHTML = (screens[route.name] || login)(route);
   const roleInputs = el.querySelectorAll('input[name="role"]');
-  roleInputs.forEach((r) => r.addEventListener("change", () => {
+  const syncAgeText = () => {
     const t = $("#ageText");
     if (!t) return;
     const role = el.querySelector('input[name="role"]:checked').value;
     t.textContent = role === "athlete"
       ? "I am 13 or older. If I am under 18, a parent or guardian knows I am using this app."
       : "I am 18 or older.";
-  }));
+  };
+  roleInputs.forEach((r) => r.addEventListener("change", syncAgeText));
+  if (roleInputs.length) syncAgeText();
 }
 
 const out = (kind, text) => { const o = $("#out"); if (o) o.innerHTML = msg(kind, text); };

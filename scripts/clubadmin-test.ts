@@ -57,29 +57,34 @@ const imp = await clubs.importRoster("dir", clubId, {
   teamName: "STA U14 Boys",
   ageGroup: "U14",
   rows: [
-    { fullName: "Josh Guberuk", parentEmail: "parent1@example.com", dateOfBirth: "2011-03-02" },
+    { fullName: "Josh Guberuk", parentEmail: "parent1@example.com", dateOfBirth: "2011-03-02", jerseyNumber: 8 },
     { fullName: "Marco Diaz", parentEmail: "parent2@example.com" },
     { fullName: "No Email Kid" },
+    { fullName: "Typo Kid", parentEmail: "parent4@example.com" },
     { name: "", parentEmail: "x@example.com" }, // missing name -> error row
   ],
 }, APP);
-check("import creates a team + 3 athletes, 1 error row", imp.ok && imp.value.created === 3 && imp.value.errors.length === 1);
-check("import emails only rows with a parent email", imp.ok && imp.value.emailed === 2 && mailer.sent.length === 2);
+check("import creates a team + 4 athletes, 1 error row", imp.ok && imp.value.created === 4 && imp.value.errors.length === 1);
+check("import emails only rows with a parent email", imp.ok && imp.value.emailed === 3 && mailer.sent.length === 3);
 check("invite email contains a claim link", mailer.sent[0]?.text.includes(`${APP}/#/join?claim=`));
 const teamId = imp.ok ? imp.value.teamId : "";
 
 const token = (await records.listByKey<{ fullName: string; token: string; parentEmail?: string }>("claim", clubId)).find((r) => r.data.fullName === "Josh Guberuk")!.data.token;
 const info = await clubs.claimInfo(token);
-check("claimInfo prefills name + team (no health data)", info?.fullName === "Josh Guberuk" && info?.teamName === "STA U14 Boys" && !("health" in (info || {})));
+check("claimInfo prefills name, birthday, jersey + team (no health data, no email)", info?.fullName === "Josh Guberuk" && info?.dateOfBirth === "2011-03-02" && info?.jerseyNumber === 8 && info?.teamName === "STA U14 Boys" && !("health" in (info || {})) && !("parentEmail" in (info || {})));
 
 const stat1 = await clubs.importStatus("dir", clubId, APP);
-check("importStatus: 3 invited, 3 pending, 0 joined", stat1.ok && stat1.value.total === 3 && stat1.value.pending === 3 && stat1.value.joined === 0);
-check("director sees a copyable invite link per pending athlete", stat1.ok && stat1.value.rows.every((r) => typeof r.inviteLink === "string" && r.inviteLink!.startsWith(`${APP}/#/join?claim=`)));
+check("importStatus: 4 invited, 4 pending, 0 joined", stat1.ok && stat1.value.total === 4 && stat1.value.pending === 4 && stat1.value.joined === 0);
+check("director sees a copyable invite link + token per pending athlete", stat1.ok && stat1.value.rows.every((r) => typeof r.inviteLink === "string" && r.inviteLink!.startsWith(`${APP}/#/join?claim=`) && typeof r.token === "string"));
 {
   const inv = await clubs.invite("dir", clubId, "coach");
   const joined = inv.ok ? await clubs.join("coach1", "coach1@sta.com", inv.value.code, "Coach One") : null;
   const coachView = await clubs.importStatus("coach1", clubId, APP);
-  check("coach does not get invite links or parent emails", !!joined?.ok && coachView.ok && coachView.value.rows.every((r) => r.inviteLink === undefined && r.parentEmail === undefined));
+  check("coach does not get invite links, tokens or parent emails", !!joined?.ok && coachView.ok && coachView.value.rows.every((r) => r.inviteLink === undefined && r.token === undefined && r.parentEmail === undefined));
+  const typo = stat1.ok ? stat1.value.rows.find((r) => r.fullName === "Typo Kid")!.token! : "";
+  check("coach cannot revoke an invite", !(await clubs.revokeClaim("coach1", clubId, typo)).ok);
+  check("director revokes a pending invite", (await clubs.revokeClaim("dir", clubId, typo)).ok && (await clubs.claimInfo(typo)) === null);
+  check("revoking a bad token is rejected", !(await clubs.revokeClaim("dir", clubId, "NOPE123456")).ok);
 }
 
 // A family signs up, creates the athlete's profile, and redeems the token.
@@ -89,6 +94,7 @@ check("redeemClaim auto-joins the team", redeem.ok && redeem.value.teamName === 
 check("member row created for the family account", (await teamsRepo.listMembers(teamId)).some((m) => m.profileId === famProfile.id && m.ownerId === "parentAcct"));
 check("re-redeeming the same token is rejected", !(await clubs.redeemClaim("parentAcct", famProfile.id, token)).ok);
 check("a bad token is rejected", !(await clubs.redeemClaim("parentAcct", famProfile.id, "NOPE1234")).ok);
+check("a joined invite cannot be revoked", !(await clubs.revokeClaim("dir", clubId, token)).ok);
 
 const stat2 = await clubs.importStatus("dir", clubId);
 check("importStatus flips to 1 joined / 2 pending", stat2.ok && stat2.value.joined === 1 && stat2.value.pending === 2);

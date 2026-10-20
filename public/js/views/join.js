@@ -138,7 +138,7 @@ export async function render(el, ctx) {
     <div class="card">
       <h3>${profiles.length ? `${esc(c.fullName)} isn't listed?` : `Set up ${esc(first(c.fullName))}'s profile`}</h3>
       <p class="sub">${profiles.length ? `Add ${esc(first(c.fullName))} as a new athlete. Name, birthday and jersey are filled in from the roster.` : `Name, birthday and jersey number come from the club roster. You add the food-safety answers, body and routine; it takes about a minute.`}</p>
-      ${!profiles.length || isParent() ? `<button class="btn ${profiles.length ? "ghost" : "primary"} block" data-act="nav" data-to="#/profile/new?claim=1">${profiles.length ? `Add ${esc(first(c.fullName))} as a new athlete` : `Set up ${esc(first(c.fullName))}`}</button>` : `<p class="disc">Player accounts hold one profile. If this invite isn't yours, ask the club to send it to the right family.</p>`}
+      ${!profiles.length || isParent() ? `<button class="btn ${profiles.length ? "ghost" : "primary"} block" data-act="nav" data-to="#/profile/new?claim=1">${profiles.length ? `Add ${esc(first(c.fullName))} as a new athlete` : `Set up ${esc(first(c.fullName))}`}</button>` : `<p class="disc">Only a parent account can add more athletes. If this invite isn't yours, ask the club to send it to the right family.</p>`}
     </div>
     <button class="btn link block" data-act="claimLater">Not now</button>
     ${privacy}`;

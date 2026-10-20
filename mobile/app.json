@@ -64,7 +64,7 @@
       "@bacons/apple-targets"
     ],
     "extra": {
-      "appUrl": "https://athlete-performance.netlify.app"
+      "appUrl": "https://athleteperformance.app"
     }
   }
 }
